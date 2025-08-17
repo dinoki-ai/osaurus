@@ -6,6 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		F0BB3CA02E52234700895593 /* NIO in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3C9F2E52234700895593 /* NIO */; };
+		F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA12E52234700895593 /* NIOConcurrencyHelpers */; };
+		F0BB3CA42E52234700895593 /* NIOCore in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA32E52234700895593 /* NIOCore */; };
+		F0BB3CA62E52240500895593 /* NIOHTTP1 in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA52E52240500895593 /* NIOHTTP1 */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		F0BB3C352E51FBCD00895593 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +59,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F0BB3CA42E52234700895593 /* NIOCore in Frameworks */,
+				F0BB3CA02E52234700895593 /* NIO in Frameworks */,
+				F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */,
+				F0BB3CA62E52240500895593 /* NIOHTTP1 in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +123,10 @@
 			);
 			name = osaurus;
 			packageProductDependencies = (
+				F0BB3C9F2E52234700895593 /* NIO */,
+				F0BB3CA12E52234700895593 /* NIOConcurrencyHelpers */,
+				F0BB3CA32E52234700895593 /* NIOCore */,
+				F0BB3CA52E52240500895593 /* NIOHTTP1 */,
 			);
 			productName = osaurus;
 			productReference = F0BB3C262E51FBCC00895593 /* osaurus.app */;
@@ -195,6 +210,9 @@
 			);
 			mainGroup = F0BB3C1D2E51FBCC00895593;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F0BB3C272E51FBCC00895593 /* Products */;
 			projectDirPath = "";
@@ -551,6 +569,40 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-nio.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.86.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		F0BB3C9F2E52234700895593 /* NIO */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */;
+			productName = NIO;
+		};
+		F0BB3CA12E52234700895593 /* NIOConcurrencyHelpers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */;
+			productName = NIOConcurrencyHelpers;
+		};
+		F0BB3CA32E52234700895593 /* NIOCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */;
+			productName = NIOCore;
+		};
+		F0BB3CA52E52240500895593 /* NIOHTTP1 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */;
+			productName = NIOHTTP1;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = F0BB3C1E2E51FBCC00895593 /* Project object */;
 }

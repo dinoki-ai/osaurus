@@ -1,3 +1,10 @@
+//
+//  MenuBarControllerView.swift
+//  osaurus
+//
+//  Created by Terence on 8/17/25.
+//
+
 import SwiftUI
 import AppKit
 

@@ -236,6 +236,18 @@ struct ContentView: View {
                         .foregroundColor(.orange)
                 }
                 
+                // Real-time transcription toggle
+                HStack {
+                    Toggle("Real-time Transcription", isOn: $whisperController.isRealTimeTranscription)
+                        .toggleStyle(.switch)
+                        .disabled(whisperController.isRecording)
+                    
+                    Text("(Process audio while recording)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.bottom, 8)
+                
                 // Recording controls
                 HStack(spacing: 12) {
                     Button(action: {
@@ -270,7 +282,7 @@ struct ContentView: View {
                     }) {
                         Label("Clear", systemImage: "trash")
                     }
-                    .disabled(whisperController.transcribedText.isEmpty)
+                    .disabled(whisperController.transcribedText.isEmpty && whisperController.realTimeTranscribedText.isEmpty)
                 }
                 
                 // Status
@@ -292,7 +304,36 @@ struct ContentView: View {
                         .lineLimit(2)
                 }
                 
-                // Transcription result
+                // Real-time transcription result (shown during recording)
+                if whisperController.isRealTimeTranscription && whisperController.isRecording && !whisperController.realTimeTranscribedText.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Live Transcription:")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 8, height: 8)
+                                .opacity(0.8)
+                                .scaleEffect(1.2)
+                                .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: whisperController.isRecording)
+                        }
+                        
+                        ScrollView {
+                            Text(whisperController.realTimeTranscribedText)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                                .background(Color(NSColor.textBackgroundColor))
+                                .cornerRadius(4)
+                        }
+                        .frame(maxHeight: 100)
+                    }
+                }
+                
+                // Final transcription result
                 if !whisperController.transcribedText.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Transcription:")

@@ -13,9 +13,16 @@ final class WhisperController: ObservableObject {
     @Published var isProcessing = false
     @Published var transcribedText = ""
     @Published var errorMessage: String?
+    @Published var isRecording = false
+    @Published var recordingTime: TimeInterval = 0
 
     private var ctx: OpaquePointer? = nil
     private let modelPath: String
+    private var audioEngine: AVAudioEngine?
+    private var recordingFile: AVAudioFile?
+    private var recordingURL: URL?
+    private var recordingTimer: Timer?
+    private var recordingStartTime: Date?
 
     init(modelPath: String = Bundle.main.path(forResource: "ggml-base", ofType: "bin") ?? "") {
         self.modelPath = modelPath
@@ -41,6 +48,111 @@ final class WhisperController: ObservableObject {
 
     // MARK: - Public
 
+    func startRecording() {
+        guard !isRecording else { return }
+        
+        // Request microphone permission
+        AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
+            guard granted else {
+                Task { @MainActor in
+                    self?.errorMessage = "Microphone access denied. Please enable microphone access in System Preferences."
+                }
+                return
+            }
+            
+            Task { @MainActor in
+                self?.setupRecording()
+            }
+        }
+    }
+    
+    func stopRecording() async {
+        guard isRecording else { return }
+        
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        
+        // Close the recording file to ensure all audio is flushed to disk
+        recordingFile = nil
+        
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        
+        isRecording = false
+        recordingTime = 0
+        
+        // Transcribe the recorded audio
+        if let recordingURL = recordingURL {
+            // Give the system a brief moment to finalize the file on disk
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            await transcribeAudio(from: recordingURL)
+            
+            // Clean up the temporary file
+            try? FileManager.default.removeItem(at: recordingURL)
+            self.recordingURL = nil
+        }
+    }
+    
+    private func setupRecording() {
+        do {
+            // Create a temporary file for recording
+            let tempDir = FileManager.default.temporaryDirectory
+            let fileName = "recording_\(Date().timeIntervalSince1970).wav"
+            recordingURL = tempDir.appendingPathComponent(fileName)
+            
+            guard let recordingURL = recordingURL else { return }
+            
+            // Setup audio engine
+            audioEngine = AVAudioEngine()
+            guard let audioEngine = audioEngine else { return }
+            
+            let inputNode = audioEngine.inputNode
+            let inputFormat = inputNode.outputFormat(forBus: 0)
+            
+            // Create file for writing
+            recordingFile = try AVAudioFile(forWriting: recordingURL,
+                                          settings: inputFormat.settings,
+                                          commonFormat: inputFormat.commonFormat,
+                                          interleaved: inputFormat.isInterleaved)
+            
+            // Install tap on input node
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] buffer, _ in
+                guard let self = self, let recordingFile = self.recordingFile else { return }
+                
+                do {
+                    try recordingFile.write(from: buffer)
+                } catch {
+                    Task { @MainActor in
+                        self.errorMessage = "Recording error: \(error.localizedDescription)"
+                    }
+                }
+            }
+            
+            // Start the engine
+            try audioEngine.prepare()
+            try audioEngine.start()
+            
+            isRecording = true
+            recordingStartTime = Date()
+            
+            // Start timer to update recording time
+            recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                guard let self = self, let startTime = self.recordingStartTime else { return }
+                Task { @MainActor in
+                    self.recordingTime = Date().timeIntervalSince(startTime)
+                }
+            }
+            
+        } catch {
+            errorMessage = "Failed to start recording: \(error.localizedDescription)"
+        }
+    }
+
+    func clearTranscription() {
+        transcribedText = ""
+        errorMessage = nil
+    }
+    
     func transcribeAudio(from url: URL, language: String? = "en", translateToEnglish: Bool = false) async {
         guard let ctx else {
             errorMessage = "Whisper context not initialized"
@@ -105,6 +217,11 @@ final class WhisperController: ObservableObject {
     private static func loadFileAsMono16kFloat32(url: URL) throws -> [Float] {
         let file = try AVAudioFile(forReading: url)
         let inFormat = file.processingFormat
+        
+        // Guard against empty recordings
+        if file.length == 0 {
+            throw NSError(domain: "Whisper", code: -1, userInfo: [NSLocalizedDescriptionKey: "Recorded file is empty (no audio captured)"])
+        }
 
         let outFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
                                       sampleRate: 16_000,

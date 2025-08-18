@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var server: ServerController
+    @StateObject private var whisperController = WhisperController()
     @State private var portString: String = "8080"
     @State private var showError: Bool = false
     @State private var isHealthy: Bool = false
@@ -27,6 +28,7 @@ struct ContentView: View {
                     serverStatusCard
                     serverControlsCard
                     serverInfoCard
+                    whisperTestCard
                 }
                 .padding()
             }
@@ -168,6 +170,92 @@ struct ContentView: View {
                 } else {
                     Text("Server is not running")
                         .foregroundColor(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+    
+    private var whisperTestCard: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Whisper Speech Recognition Test", systemImage: "mic.circle")
+                    .font(.headline)
+                
+                // Recording controls
+                HStack(spacing: 12) {
+                    Button(action: {
+                        if whisperController.isRecording {
+                            Task {
+                                await whisperController.stopRecording()
+                            }
+                        } else {
+                            whisperController.startRecording()
+                        }
+                    }) {
+                        Label(
+                            whisperController.isRecording ? "Stop Recording" : "Start Recording",
+                            systemImage: whisperController.isRecording ? "stop.circle.fill" : "mic.circle.fill"
+                        )
+                        .foregroundColor(whisperController.isRecording ? .red : .accentColor)
+                    }
+                    .controlSize(.large)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(whisperController.isProcessing)
+                    
+                    if whisperController.isRecording {
+                        Text(String(format: "Recording: %.1fs", whisperController.recordingTime))
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundColor(.red)
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        whisperController.clearTranscription()
+                    }) {
+                        Label("Clear", systemImage: "trash")
+                    }
+                    .disabled(whisperController.transcribedText.isEmpty)
+                }
+                
+                // Status
+                if whisperController.isProcessing {
+                    HStack {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Processing audio...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                // Error message
+                if let error = whisperController.errorMessage {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                        .lineLimit(2)
+                }
+                
+                // Transcription result
+                if !whisperController.transcribedText.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Transcription:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        ScrollView {
+                            Text(whisperController.transcribedText)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                                .background(Color(NSColor.textBackgroundColor))
+                                .cornerRadius(4)
+                        }
+                        .frame(maxHeight: 100)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

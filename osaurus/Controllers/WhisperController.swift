@@ -15,30 +15,60 @@ final class WhisperController: ObservableObject {
     @Published var errorMessage: String?
     @Published var isRecording = false
     @Published var recordingTime: TimeInterval = 0
+    @Published var currentModelPath: String?
+    @Published var isModelLoaded = false
 
     private var ctx: OpaquePointer? = nil
-    private let modelPath: String
     private var audioEngine: AVAudioEngine?
     private var recordingFile: AVAudioFile?
     private var recordingURL: URL?
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
 
-    init(modelPath: String = Bundle.main.path(forResource: "ggml-base", ofType: "bin") ?? "") {
-        self.modelPath = modelPath
+    init() {
+        // Don't load any model by default
+    }
+
+    func loadModel(at path: String) {
+        // Free existing context if any
+        if let ctx = ctx {
+            whisper_free(ctx)
+            self.ctx = nil
+            isModelLoaded = false
+        }
+        
+        guard !path.isEmpty else {
+            errorMessage = "Model path is empty."
+            currentModelPath = nil
+            return
+        }
+        
+        // Check if file exists
+        guard FileManager.default.fileExists(atPath: path) else {
+            errorMessage = "Model file not found at path: \(path)"
+            currentModelPath = nil
+            return
+        }
+        
+        currentModelPath = path
         setupWhisper()
     }
 
     private func setupWhisper() {
-        guard !modelPath.isEmpty else {
-            errorMessage = "Model file not found in bundle."
+        guard let modelPath = currentModelPath, !modelPath.isEmpty else {
+            errorMessage = "No model path set."
+            isModelLoaded = false
             return
         }
+        
         ctx = modelPath.withCString { whisper_init_from_file($0) }
         if ctx == nil {
             errorMessage = "Failed to initialize Whisper context."
+            isModelLoaded = false
         } else {
             print("[Whisper] Initialized with model at: \(modelPath)")
+            errorMessage = nil
+            isModelLoaded = true
         }
     }
 
@@ -50,6 +80,12 @@ final class WhisperController: ObservableObject {
 
     func startRecording() {
         guard !isRecording else { return }
+        
+        // Check if model is loaded
+        guard isModelLoaded else {
+            errorMessage = "Please download and select a model first."
+            return
+        }
         
         // Request microphone permission
         AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
@@ -155,7 +191,7 @@ final class WhisperController: ObservableObject {
     
     func transcribeAudio(from url: URL, language: String? = "en", translateToEnglish: Bool = false) async {
         guard let ctx else {
-            errorMessage = "Whisper context not initialized"
+            errorMessage = "Whisper context not initialized. Please download and select a model."
             return
         }
         isProcessing = true

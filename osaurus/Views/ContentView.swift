@@ -10,10 +10,13 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var server: ServerController
     @StateObject private var whisperController = WhisperController()
+    @StateObject private var downloadManager = ModelDownloadManager()
     @State private var portString: String = "8080"
     @State private var showError: Bool = false
     @State private var isHealthy: Bool = false
     @State private var lastHealthCheck: Date?
+    @State private var selectedModelId: String?
+    @State private var showModelManager = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -37,6 +40,26 @@ struct ContentView: View {
         .onAppear {
             portString = String(server.port)
             startHealthCheck()
+            
+            // Load default model if available
+            if let baseModel = WhisperModel.availableModels.first(where: { $0.size == "base" }),
+               let modelPath = downloadManager.getModelPath(for: baseModel) {
+                selectedModelId = baseModel.id
+                whisperController.loadModel(at: modelPath.path)
+            }
+        }
+        .onChange(of: selectedModelId) { newModelId in
+            // Load the selected model
+            if let modelId = newModelId,
+               let model = WhisperModel.availableModels.first(where: { $0.id == modelId }),
+               let modelPath = downloadManager.getModelPath(for: model) {
+                whisperController.loadModel(at: modelPath.path)
+            }
+        }
+        .sheet(isPresented: $showModelManager) {
+            ModelListView(selectedModelId: $selectedModelId)
+                .frame(width: 700, height: 500)
+                .environmentObject(downloadManager)
         }
         .alert("Server Error", isPresented: $showError) {
             Button("OK", role: .cancel) {}
@@ -179,8 +202,39 @@ struct ContentView: View {
     private var whisperTestCard: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 16) {
-                Label("Whisper Speech Recognition Test", systemImage: "mic.circle")
-                    .font(.headline)
+                HStack {
+                    Label("Whisper Speech Recognition", systemImage: "mic.circle")
+                        .font(.headline)
+                    
+                    Spacer()
+                    
+                    Button(action: { showModelManager = true }) {
+                        Label("Manage Models", systemImage: "square.stack.3d.up")
+                    }
+                    .controlSize(.small)
+                }
+                
+                // Current model info
+                if let modelId = selectedModelId,
+                   let model = WhisperModel.availableModels.first(where: { $0.id == modelId }) {
+                    HStack {
+                        Text("Model:")
+                            .foregroundColor(.secondary)
+                        Text(model.displayName)
+                            .fontWeight(.medium)
+                        
+                        if whisperController.isModelLoaded {
+                            Label("Ready", systemImage: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                        }
+                    }
+                    .font(.caption)
+                } else {
+                    Label("No model selected. Click 'Manage Models' to download one.", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
                 
                 // Recording controls
                 HStack(spacing: 12) {

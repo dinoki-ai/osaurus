@@ -11,6 +11,8 @@
 		F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA12E52234700895593 /* NIOConcurrencyHelpers */; };
 		F0BB3CA42E52234700895593 /* NIOCore in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA32E52234700895593 /* NIOCore */; };
 		F0BB3CA62E52240500895593 /* NIOHTTP1 in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA52E52240500895593 /* NIOHTTP1 */; };
+		F0EE76502E529C5B00C87993 /* WhisperFramework in Frameworks */ = {isa = PBXBuildFile; productRef = F0EE764F2E529C5B00C87993 /* WhisperFramework */; };
+		F0EE76532E52BF1F00C87993 /* WhisperFramework in Frameworks */ = {isa = PBXBuildFile; productRef = F0EE76522E52BF1F00C87993 /* WhisperFramework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,8 +62,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				F0BB3CA42E52234700895593 /* NIOCore in Frameworks */,
+				F0EE76502E529C5B00C87993 /* WhisperFramework in Frameworks */,
 				F0BB3CA02E52234700895593 /* NIO in Frameworks */,
 				F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */,
+				F0EE76532E52BF1F00C87993 /* WhisperFramework in Frameworks */,
 				F0BB3CA62E52240500895593 /* NIOHTTP1 in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -127,6 +131,8 @@
 				F0BB3CA12E52234700895593 /* NIOConcurrencyHelpers */,
 				F0BB3CA32E52234700895593 /* NIOCore */,
 				F0BB3CA52E52240500895593 /* NIOHTTP1 */,
+				F0EE764F2E529C5B00C87993 /* WhisperFramework */,
+				F0EE76522E52BF1F00C87993 /* WhisperFramework */,
 			);
 			productName = osaurus;
 			productReference = F0BB3C262E51FBCC00895593 /* osaurus.app */;
@@ -212,6 +218,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */,
+				F0EE76512E52BF1F00C87993 /* XCLocalSwiftPackageReference "vendors/Whisper" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F0BB3C272E51FBCC00895593 /* Products */;
@@ -570,6 +577,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		F0EE76512E52BF1F00C87993 /* XCLocalSwiftPackageReference "vendors/Whisper" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = vendors/Whisper;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -601,6 +615,14 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */;
 			productName = NIOHTTP1;
+		};
+		F0EE764F2E529C5B00C87993 /* WhisperFramework */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = WhisperFramework;
+		};
+		F0EE76522E52BF1F00C87993 /* WhisperFramework */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = WhisperFramework;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

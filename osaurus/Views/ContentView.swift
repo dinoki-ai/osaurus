@@ -9,8 +9,6 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var server: ServerController
-    @StateObject private var whisperController = WhisperController()
-    @StateObject private var downloadManager = ModelDownloadManager()
     @State private var portString: String = "8080"
     @State private var showError: Bool = false
     @State private var isHealthy: Bool = false
@@ -31,7 +29,6 @@ struct ContentView: View {
                     serverStatusCard
                     serverControlsCard
                     serverInfoCard
-                    whisperTestCard
                 }
                 .padding()
             }
@@ -40,26 +37,6 @@ struct ContentView: View {
         .onAppear {
             portString = String(server.port)
             startHealthCheck()
-            
-            // Load default model if available
-            if let baseModel = WhisperModel.availableModels.first(where: { $0.size == "base" }),
-               let modelPath = downloadManager.getModelPath(for: baseModel) {
-                selectedModelId = baseModel.id
-                whisperController.loadModel(at: modelPath.path)
-            }
-        }
-        .onChange(of: selectedModelId) { newModelId in
-            // Load the selected model
-            if let modelId = newModelId,
-               let model = WhisperModel.availableModels.first(where: { $0.id == modelId }),
-               let modelPath = downloadManager.getModelPath(for: model) {
-                whisperController.loadModel(at: modelPath.path)
-            }
-        }
-        .sheet(isPresented: $showModelManager) {
-            ModelListView(selectedModelId: $selectedModelId)
-                .frame(width: 700, height: 500)
-                .environmentObject(downloadManager)
         }
         .alert("Server Error", isPresented: $showError) {
             Button("OK", role: .cancel) {}
@@ -193,164 +170,6 @@ struct ContentView: View {
                 } else {
                     Text("Server is not running")
                         .foregroundColor(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-    
-    private var whisperTestCard: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Label("Whisper Speech Recognition", systemImage: "mic.circle")
-                        .font(.headline)
-                    
-                    Spacer()
-                    
-                    Button(action: { showModelManager = true }) {
-                        Label("Manage Models", systemImage: "square.stack.3d.up")
-                    }
-                    .controlSize(.small)
-                }
-                
-                // Current model info
-                if let modelId = selectedModelId,
-                   let model = WhisperModel.availableModels.first(where: { $0.id == modelId }) {
-                    HStack {
-                        Text("Model:")
-                            .foregroundColor(.secondary)
-                        Text(model.displayName)
-                            .fontWeight(.medium)
-                        
-                        if whisperController.isModelLoaded {
-                            Label("Ready", systemImage: "checkmark.circle.fill")
-                                .font(.caption)
-                                .foregroundColor(.green)
-                        }
-                    }
-                    .font(.caption)
-                } else {
-                    Label("No model selected. Click 'Manage Models' to download one.", systemImage: "exclamationmark.triangle")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                }
-                
-                // Real-time transcription toggle
-                HStack {
-                    Toggle("Real-time Transcription", isOn: $whisperController.isRealTimeTranscription)
-                        .toggleStyle(.switch)
-                        .disabled(whisperController.isRecording)
-                    
-                    Text("(Process audio while recording)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.bottom, 8)
-                
-                // Recording controls
-                HStack(spacing: 12) {
-                    Button(action: {
-                        if whisperController.isRecording {
-                            Task {
-                                await whisperController.stopRecording()
-                            }
-                        } else {
-                            whisperController.startRecording()
-                        }
-                    }) {
-                        Label(
-                            whisperController.isRecording ? "Stop Recording" : "Start Recording",
-                            systemImage: whisperController.isRecording ? "stop.circle.fill" : "mic.circle.fill"
-                        )
-                        .foregroundColor(whisperController.isRecording ? .red : .accentColor)
-                    }
-                    .controlSize(.large)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(whisperController.isProcessing)
-                    
-                    if whisperController.isRecording {
-                        Text(String(format: "Recording: %.1fs", whisperController.recordingTime))
-                            .font(.system(.body, design: .monospaced))
-                            .foregroundColor(.red)
-                    }
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        whisperController.clearTranscription()
-                    }) {
-                        Label("Clear", systemImage: "trash")
-                    }
-                    .disabled(whisperController.transcribedText.isEmpty && whisperController.realTimeTranscribedText.isEmpty)
-                }
-                
-                // Status
-                if whisperController.isProcessing {
-                    HStack {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Processing audio...")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                // Error message
-                if let error = whisperController.errorMessage {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundColor(.red)
-                        .font(.caption)
-                        .lineLimit(2)
-                }
-                
-                // Real-time transcription result (shown during recording)
-                if whisperController.isRealTimeTranscription && whisperController.isRecording && !whisperController.realTimeTranscribedText.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Live Transcription:")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            
-                            Circle()
-                                .fill(Color.red)
-                                .frame(width: 8, height: 8)
-                                .opacity(0.8)
-                                .scaleEffect(1.2)
-                                .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: whisperController.isRecording)
-                        }
-                        
-                        ScrollView {
-                            Text(whisperController.realTimeTranscribedText)
-                                .font(.system(.body, design: .monospaced))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(8)
-                                .background(Color(NSColor.textBackgroundColor))
-                                .cornerRadius(4)
-                        }
-                        .frame(maxHeight: 100)
-                    }
-                }
-                
-                // Final transcription result
-                if !whisperController.transcribedText.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Transcription:")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        ScrollView {
-                            Text(whisperController.transcribedText)
-                                .font(.system(.body, design: .monospaced))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(8)
-                                .background(Color(NSColor.textBackgroundColor))
-                                .cornerRadius(4)
-                        }
-                        .frame(maxHeight: 100)
-                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

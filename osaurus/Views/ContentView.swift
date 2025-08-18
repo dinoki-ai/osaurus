@@ -43,6 +43,9 @@ struct ContentView: View {
         } message: {
             Text(server.lastErrorMessage ?? "An error occurred while managing the server.")
         }
+        .sheet(isPresented: $showModelManager) {
+            ModelDownloadView()
+        }
     }
     
     private var headerView: some View {
@@ -149,6 +152,13 @@ struct ContentView: View {
                         }
                         .controlSize(.large)
                     }
+                    
+                    Spacer()
+                    
+                    Button(action: { showModelManager = true }) {
+                        Label("Manage Models", systemImage: "square.and.arrow.down")
+                    }
+                    .controlSize(.large)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

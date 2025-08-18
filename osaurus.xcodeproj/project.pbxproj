@@ -11,6 +11,7 @@
 		F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA12E52234700895593 /* NIOConcurrencyHelpers */; };
 		F0BB3CA42E52234700895593 /* NIOCore in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA32E52234700895593 /* NIOCore */; };
 		F0BB3CA62E52240500895593 /* NIOHTTP1 in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA52E52240500895593 /* NIOHTTP1 */; };
+		F0C60D622E53DE140028ED4F /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = F0C60D612E53DE140028ED4F /* MLX */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +63,7 @@
 				F0BB3CA42E52234700895593 /* NIOCore in Frameworks */,
 				F0BB3CA02E52234700895593 /* NIO in Frameworks */,
 				F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */,
+				F0C60D622E53DE140028ED4F /* MLX in Frameworks */,
 				F0BB3CA62E52240500895593 /* NIOHTTP1 in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -127,6 +129,7 @@
 				F0BB3CA12E52234700895593 /* NIOConcurrencyHelpers */,
 				F0BB3CA32E52234700895593 /* NIOCore */,
 				F0BB3CA52E52240500895593 /* NIOHTTP1 */,
+				F0C60D612E53DE140028ED4F /* MLX */,
 			);
 			productName = osaurus;
 			productReference = F0BB3C262E51FBCC00895593 /* osaurus.app */;
@@ -212,6 +215,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */,
+				F0C60D602E53DE140028ED4F /* XCRemoteSwiftPackageReference "mlx-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F0BB3C272E51FBCC00895593 /* Products */;
@@ -581,6 +585,14 @@
 				minimumVersion = 2.86.0;
 			};
 		};
+		F0C60D602E53DE140028ED4F /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.25.6;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -603,6 +615,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */;
 			productName = NIOHTTP1;
+		};
+		F0C60D612E53DE140028ED4F /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F0C60D602E53DE140028ED4F /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

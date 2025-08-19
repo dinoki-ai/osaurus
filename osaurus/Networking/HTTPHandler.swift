@@ -16,18 +16,22 @@ final class HTTPHandler: ChannelInboundHandler {
     typealias OutboundOut = HTTPServerResponsePart
 
     private var requestHead: HTTPRequestHead?
-    private let router = Router()
+    private var requestBody = Data()
+    private var context: ChannelHandlerContext?
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
+        self.context = context
         let part = self.unwrapInboundIn(data)
         
         switch part {
         case .head(let head):
             requestHead = head
             
-        case .body:
-            // Endpoints currently ignore body
-            break
+        case .body(let buffer):
+            // Collect body data
+            if let data = buffer.readData(length: buffer.readableBytes) {
+                requestBody.append(data)
+            }
             
         case .end:
             guard let head = requestHead else {
@@ -38,17 +42,22 @@ final class HTTPHandler: ChannelInboundHandler {
             // Extract path without query parameters
             let pathOnly = extractPath(from: head.uri)
             
-            // Route the request
-            let response = router.route(method: head.method.rawValue, path: pathOnly)
-            sendResponse(
-                context: context,
-                version: head.version,
-                status: response.status,
-                headers: response.headers,
-                body: response.body
-            )
+            // Create router with context
+            let router = Router(context: context, handler: self)
+            let response = router.route(method: head.method.rawValue, path: pathOnly, body: requestBody)
+            // Only send response if not handled asynchronously
+            if !response.body.isEmpty || response.status != .ok {
+                sendResponse(
+                    context: context,
+                    version: head.version,
+                    status: response.status,
+                    headers: response.headers,
+                    body: response.body
+                )
+            }
             
             requestHead = nil
+            requestBody = Data()
         }
     }
     

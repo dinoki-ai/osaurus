@@ -7,15 +7,25 @@
 
 import Foundation
 import NIOHTTP1
+import NIOCore
 
 /// Simple routing logic for HTTP requests
 public struct Router {
+    /// Channel context for async operations (set by HTTPHandler)
+    var context: ChannelHandlerContext?
+    weak var handler: HTTPHandler?
+    
+    init(context: ChannelHandlerContext? = nil, handler: HTTPHandler? = nil) {
+        self.context = context
+        self.handler = handler
+    }
     /// Routes incoming HTTP requests to appropriate responses
     /// - Parameters:
     ///   - method: HTTP method (GET, POST, etc.)
     ///   - path: URL path
+    ///   - body: Request body data
     /// - Returns: Tuple containing status, headers, and response body
-    public func route(method: String, path: String) -> (status: HTTPResponseStatus, headers: [(String, String)], body: String) {
+    public func route(method: String, path: String, body: Data = Data()) -> (status: HTTPResponseStatus, headers: [(String, String)], body: String) {
         switch (method, path) {
         case ("GET", "/health"):
             return healthEndpoint()
@@ -31,6 +41,12 @@ public struct Router {
             
         case ("GET", "/transcribe/status"):
             return transcriptionStatusEndpoint()
+            
+        case ("GET", "/models"):
+            return modelsEndpoint()
+            
+        case ("POST", "/chat/completions"):
+            return chatCompletionsEndpoint(body: body, context: context, handler: handler)
             
         default:
             return notFoundEndpoint()
@@ -89,5 +105,65 @@ public struct Router {
         let jsonString = String(data: jsonData, encoding: .utf8)!
         
         return (.ok, [("Content-Type", "application/json; charset=utf-8")], jsonString)
+    }
+    
+    private func modelsEndpoint() -> (HTTPResponseStatus, [(String, String)], String) {
+        let models = MLXService.shared.getAvailableModels().map { modelName in
+            OpenAIModel(from: modelName)
+        }
+        
+        let response = ModelsResponse(data: models)
+        
+        do {
+            let jsonData = try JSONEncoder().encode(response)
+            let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
+            return (.ok, [("Content-Type", "application/json; charset=utf-8")], jsonString)
+        } catch {
+            return errorResponse(message: "Failed to encode models", statusCode: .internalServerError)
+        }
+    }
+    
+    private func chatCompletionsEndpoint(body: Data, context: ChannelHandlerContext?, handler: HTTPHandler?) -> (HTTPResponseStatus, [(String, String)], String) {
+        // Decode the request
+        let decoder = JSONDecoder()
+        guard let request = try? decoder.decode(ChatCompletionRequest.self, from: body) else {
+            return errorResponse(message: "Invalid request format", statusCode: .badRequest)
+        }
+        
+        // Async operations require context and handler
+        guard let context = context, let handler = handler else {
+            return errorResponse(message: "Server configuration error", statusCode: .internalServerError)
+        }
+        
+        // Handle async generation
+        Task { @MainActor in
+            await AsyncHTTPHandler.shared.handleChatCompletion(
+                request: request,
+                context: context,
+                handler: handler
+            )
+        }
+        
+        // Return empty response - actual response will be sent asynchronously
+        return (.ok, [], "")
+    }
+    
+    private func errorResponse(message: String, statusCode: HTTPResponseStatus) -> (HTTPResponseStatus, [(String, String)], String) {
+        let error = OpenAIError(
+            error: OpenAIError.ErrorDetail(
+                message: message,
+                type: "invalid_request_error",
+                param: nil,
+                code: nil
+            )
+        )
+        
+        do {
+            let jsonData = try JSONEncoder().encode(error)
+            let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
+            return (statusCode, [("Content-Type", "application/json; charset=utf-8")], jsonString)
+        } catch {
+            return (statusCode, [("Content-Type", "application/json; charset=utf-8")], "{\"error\":{\"message\":\"Internal error\"}}")
+        }
     }
 }

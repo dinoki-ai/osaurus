@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import Hub
 
 /// Download task information
 struct DownloadTaskInfo {
@@ -38,19 +39,12 @@ final class ModelManager: NSObject, ObservableObject {
         return modelsPath
     }()
     
-    private var urlSession: URLSession!
-    private nonisolated(unsafe) var downloadTaskInfos: [URLSessionTask: DownloadTaskInfo] = [:]
-    private var modelDownloadProgress: [String: [String: Double]] = [:] // modelId -> [fileName: progress]
-    private var activeDownloads: [String: Set<URLSessionDownloadTask>] = [:] // modelId -> tasks
+    private var activeDownloadTasks: [String: Task<Void, Never>] = [:] // modelId -> Task
     private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Initialization
     override init() {
         super.init()
-        
-        let config = URLSessionConfiguration.default
-        config.allowsCellularAccess = false
-        self.urlSession = URLSession(configuration: config, delegate: self, delegateQueue: .main)
         
         loadAvailableModels()
     }
@@ -137,48 +131,87 @@ final class ModelManager: NSObject, ObservableObject {
         }
     }
     
-    /// Download a model
+    /// Download a model using Hugging Face Hub snapshot API
     func downloadModel(_ model: MLXModel) {
-        guard downloadStates[model.id] == .notStarted || 
-              downloadStates[model.id] == nil else { return }
+        guard downloadStates[model.id] == .notStarted || downloadStates[model.id] == nil else { return }
+        
+        // Reset any previous task
+        activeDownloadTasks[model.id]?.cancel()
         
         downloadStates[model.id] = .downloading(progress: 0.0)
         
-        // Create model directory
+        // Ensure local directory exists
         do {
-            try FileManager.default.createDirectory(at: model.localDirectory, 
-                                                   withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: model.localDirectory,
+                withIntermediateDirectories: true
+            )
         } catch {
             downloadStates[model.id] = .failed(error: "Failed to create directory: \(error.localizedDescription)")
             return
         }
         
-        // Initialize progress tracking
-        modelDownloadProgress[model.id] = [:]
-        activeDownloads[model.id] = []
-        
-        // Download each required file
-        for (index, fileName) in model.requiredFiles.enumerated() {
-            downloadFile(fileName: fileName, 
-                        for: model, 
-                        fileIndex: index,
-                        totalFiles: model.requiredFiles.count)
+        // Start snapshot download task
+        let task = Task { [weak self] in
+            guard let self = self else { return }
+            let repo = Hub.Repo(id: model.id)
+            
+            do {
+                // Prefer grabbing common necessary files, but allow weights via wildcard
+                let patterns = [
+                    "config.json",
+                    "tokenizer.json",
+                    "tokenizer_config.json",
+                    "special_tokens_map.json",
+                    "generation_config.json",
+                    "*.safetensors"
+                ]
+                
+                // Download a snapshot to a temporary location managed by Hub
+                let snapshotDirectory = try await Hub.snapshot(
+                    from: repo,
+                    matching: patterns,
+                    progressHandler: { progress in
+                        Task { @MainActor [weak self] in
+                            guard let self = self else { return }
+                            // Clamp to [0, 1]
+                            let fraction = max(0.0, min(1.0, progress.fractionCompleted))
+                            self.downloadStates[model.id] = .downloading(progress: fraction)
+                        }
+                    }
+                )
+                
+                // Copy snapshot contents into our managed models directory
+                try self.copyContents(of: snapshotDirectory, to: model.localDirectory)
+                
+                // Verify
+                let completed = model.isDownloaded
+                await MainActor.run {
+                    self.downloadStates[model.id] = completed ? .completed : .failed(error: "Downloaded snapshot incomplete")
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    self.downloadStates[model.id] = .notStarted
+                }
+            } catch {
+                await MainActor.run {
+                    self.downloadStates[model.id] = .failed(error: error.localizedDescription)
+                }
+            }
+            
+            await MainActor.run {
+                self.activeDownloadTasks[model.id] = nil
+            }
         }
+        
+        activeDownloadTasks[model.id] = task
     }
     
     /// Cancel a download
     func cancelDownload(_ modelId: String) {
-        // Cancel all active download tasks for this model
-        if let tasks = activeDownloads[modelId] {
-            for task in tasks {
-                task.cancel()
-                downloadTaskInfos.removeValue(forKey: task)
-            }
-        }
-        
-        // Clean up tracking
-        activeDownloads.removeValue(forKey: modelId)
-        modelDownloadProgress.removeValue(forKey: modelId)
+        // Cancel active snapshot task if any
+        activeDownloadTasks[modelId]?.cancel()
+        activeDownloadTasks[modelId] = nil
         downloadStates[modelId] = .notStarted
     }
     
@@ -217,131 +250,36 @@ final class ModelManager: NSObject, ObservableObject {
     
     // MARK: - Private Methods
     
-    private func downloadFile(fileName: String, for model: MLXModel, fileIndex: Int, totalFiles: Int) {
-        // Construct HuggingFace URL
-        let urlString = "https://huggingface.co/\(model.id)/resolve/main/\(fileName)"
-        guard let url = URL(string: urlString) else {
-            downloadStates[model.id] = .failed(error: "Invalid URL for file: \(fileName)")
-            return
+    private func copyContents(of sourceDirectory: URL, to destinationDirectory: URL) throws {
+        let fileManager = FileManager.default
+        
+        // Ensure destination exists and is empty
+        if fileManager.fileExists(atPath: destinationDirectory.path) {
+            // Remove any existing contents
+            let existingItems = try fileManager.contentsOfDirectory(atPath: destinationDirectory.path)
+            for item in existingItems {
+                let url = destinationDirectory.appendingPathComponent(item)
+                try fileManager.removeItem(at: url)
+            }
+        } else {
+            try fileManager.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
         }
         
-        let request = URLRequest(url: url)
-        let downloadTask = urlSession.downloadTask(with: request)
-        
-        // Store task info
-        let taskInfo = DownloadTaskInfo(modelId: model.id,
-                                        fileName: fileName,
-                                        fileIndex: fileIndex,
-                                        totalFiles: totalFiles)
-        downloadTaskInfos[downloadTask] = taskInfo
-        
-        // Track active downloads
-        if activeDownloads[model.id] == nil {
-            activeDownloads[model.id] = []
+        // Copy all items
+        let items = try fileManager.contentsOfDirectory(atPath: sourceDirectory.path)
+        for item in items {
+            let src = sourceDirectory.appendingPathComponent(item)
+            let dst = destinationDirectory.appendingPathComponent(item)
+            // If src is a directory, recursively copy
+            var isDir: ObjCBool = false
+            fileManager.fileExists(atPath: src.path, isDirectory: &isDir)
+            if isDir.boolValue {
+                try fileManager.createDirectory(at: dst, withIntermediateDirectories: true)
+                try copyContents(of: src, to: dst)
+            } else {
+                try fileManager.copyItem(at: src, to: dst)
+            }
         }
-        activeDownloads[model.id]?.insert(downloadTask)
-        
-        // Initialize progress for this file
-        modelDownloadProgress[model.id]?[fileName] = 0.0
-        
-        downloadTask.resume()
-    }
-    
-    private func updateOverallProgress(for modelId: String) {
-        guard let fileProgress = modelDownloadProgress[modelId],
-              !fileProgress.isEmpty else { return }
-        
-        // Calculate average progress across all files
-        let totalProgress = fileProgress.values.reduce(0, +) / Double(fileProgress.count)
-        downloadStates[modelId] = .downloading(progress: totalProgress)
-    }
-    
-    nonisolated private func getModelId(for task: URLSessionTask) -> String? {
-        return downloadTaskInfos[task]?.modelId
     }
 }
 
-// MARK: - URLSessionDownloadDelegate
-extension ModelManager: URLSessionDownloadDelegate {
-    nonisolated func urlSession(_ session: URLSession, 
-                                downloadTask: URLSessionDownloadTask,
-                                didFinishDownloadingTo location: URL) {
-        guard let taskInfo = downloadTaskInfos[downloadTask],
-              let modelId = getModelId(for: downloadTask) else { return }
-        
-        Task { @MainActor in
-            guard let model = availableModels.first(where: { $0.id == modelId }) else { return }
-            
-            let destinationURL = model.localDirectory.appendingPathComponent(taskInfo.fileName)
-            
-            do {
-                // Remove existing file if present
-                try? FileManager.default.removeItem(at: destinationURL)
-                
-                // Move downloaded file to destination
-                try FileManager.default.moveItem(at: location, to: destinationURL)
-                
-                // Update progress for this file
-                modelDownloadProgress[model.id]?[taskInfo.fileName] = 1.0
-                
-                // Remove from active downloads
-                activeDownloads[model.id]?.remove(downloadTask)
-                downloadTaskInfos.removeValue(forKey: downloadTask)
-                
-                // Check if all files are downloaded
-                if activeDownloads[model.id]?.isEmpty ?? true {
-                    // Verify all files exist
-                    if model.isDownloaded {
-                        downloadStates[model.id] = .completed
-                    } else {
-                        downloadStates[model.id] = .failed(error: "Some files failed to download")
-                    }
-                    
-                    // Clean up
-                    activeDownloads.removeValue(forKey: model.id)
-                    modelDownloadProgress.removeValue(forKey: model.id)
-                } else {
-                    updateOverallProgress(for: model.id)
-                }
-            } catch {
-                downloadStates[model.id] = .failed(error: "Failed to save file: \(error.localizedDescription)")
-                cancelDownload(model.id)
-            }
-        }
-    }
-    
-    nonisolated func urlSession(_ session: URLSession,
-                                downloadTask: URLSessionDownloadTask,
-                                didWriteData bytesWritten: Int64,
-                                totalBytesWritten: Int64,
-                                totalBytesExpectedToWrite: Int64) {
-        guard totalBytesExpectedToWrite > 0,
-              let taskInfo = downloadTaskInfos[downloadTask],
-              let modelId = getModelId(for: downloadTask) else { return }
-        
-        let fileProgress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
-        
-        Task { @MainActor in
-            modelDownloadProgress[modelId]?[taskInfo.fileName] = fileProgress
-            updateOverallProgress(for: modelId)
-        }
-    }
-    
-    nonisolated func urlSession(_ session: URLSession,
-                                task: URLSessionTask,
-                                didCompleteWithError error: Error?) {
-        guard let error = error,
-              let modelId = getModelId(for: task) else { return }
-        
-        Task { @MainActor in
-            // Handle cancellation
-            if (error as NSError).code == NSURLErrorCancelled {
-                return
-            }
-            
-            // Handle other errors
-            downloadStates[modelId] = .failed(error: error.localizedDescription)
-            cancelDownload(modelId)
-        }
-    }
-}

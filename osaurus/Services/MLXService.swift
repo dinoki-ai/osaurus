@@ -6,22 +6,13 @@
 //
 
 import Foundation
-import MLX
-import MLXLLM
 import MLXLMCommon
-import MLXVLM
-
-/// Model type enumeration
-enum ModelType {
-    case llm
-    case vlm
-}
+import MLXLLM
 
 /// Represents a language model configuration
 struct LMModel {
     let name: String
-    let configuration: ModelRegistry
-    let type: ModelType
+    let modelId: String  // The model ID from ModelManager (e.g., "mlx-community/Llama-3.2-3B-Instruct-4bit")
 }
 
 /// Message role for chat interactions
@@ -35,79 +26,48 @@ enum MessageRole: String, Codable {
 struct Message: Codable {
     let role: MessageRole
     let content: String
-    let images: [URL]
-    let videos: [URL]
     
-    init(role: MessageRole, content: String, images: [URL] = [], videos: [URL] = []) {
+    init(role: MessageRole, content: String) {
         self.role = role
         self.content = content
-        self.images = images
-        self.videos = videos
     }
 }
 
-/// A service class that manages machine learning models for text and vision-language tasks.
-/// This class handles model loading, caching, and text generation using various LLM and VLM models.
+/// A service class that manages machine learning models for text generation tasks.
+/// This class handles model loading, caching, and text generation using various LLM models.
 @Observable
 @MainActor
 class MLXService {
     static let shared = MLXService()
     
-    /// Mapping between downloaded model IDs and MLX configurations
-    static let modelMapping: [String: (name: String, configuration: ModelRegistry, type: ModelType)] = [
-        // Llama models
-        "mlx-community/Llama-3.2-3B-Instruct-4bit": ("llama-3.2-3b-instruct", LLMRegistry.llama3_2_3B_4bit, .llm),
-        "mlx-community/Llama-3.2-1B-Instruct-4bit": ("llama-3.2-1b-instruct", LLMRegistry.llama3_2_1B_4bit, .llm),
-        
-        // Qwen models
-        "mlx-community/Qwen2.5-7B-Instruct-4bit": ("qwen2.5-7b-instruct", LLMRegistry.qwen2_5_7B_4bit, .llm),
-        "mlx-community/Qwen2.5-3B-Instruct-4bit": ("qwen2.5-3b-instruct", LLMRegistry.qwen2_5_3B_4bit, .llm),
-        
-        // Gemma models
-        "mlx-community/gemma-2-9b-it-4bit": ("gemma-2-9b-instruct", LLMRegistry.gemma2_9B_4bit, .llm),
-        "mlx-community/gemma-2-2b-it-4bit": ("gemma-2-2b-instruct", LLMRegistry.gemma2_2B_4bit, .llm),
-        
-        // DeepSeek models
-        "mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit": ("deepseek-r1-1.5b", LLMRegistry.qwen2_5_1_5b, .llm),
-        
-        // OpenELM models
-        "mlx-community/OpenELM-3B-Instruct-4bit": ("openelm-3b-instruct", LLMRegistry.openelm_3B_instruct, .llm)
-    ]
+    /// Thread-safe cache of available model names
+    private static let availableModelsCache = NSCache<NSString, NSArray>()
     
     /// List of available models that can be used for generation.
     /// Dynamically generated from downloaded models
     var availableModels: [LMModel] {
-        var models: [LMModel] = []
-        
         // Get downloaded models from ModelManager
         let downloadedModels = ModelManager.shared.availableModels.filter { $0.isDownloaded }
         
-        // Map downloaded models to LMModel configurations
-        for downloadedModel in downloadedModels {
-            if let mapping = Self.modelMapping[downloadedModel.id] {
-                let lmModel = LMModel(
-                    name: mapping.name,
-                    configuration: mapping.configuration,
-                    type: mapping.type
-                )
-                models.append(lmModel)
-            }
+        // Map downloaded models to LMModel
+        return downloadedModels.map { downloadedModel in
+            LMModel(
+                name: downloadedModel.name.lowercased().replacingOccurrences(of: " ", with: "-"),
+                modelId: downloadedModel.id
+            )
         }
-        
-        // If no models are downloaded, return a default set for testing
-        if models.isEmpty {
-            models = [
-                LMModel(name: "llama3.2:1b", configuration: LLMRegistry.llama3_2_1B_4bit, type: .llm),
-                LMModel(name: "qwen2.5:1.5b", configuration: LLMRegistry.qwen2_5_1_5b, type: .llm),
-                LMModel(name: "smolLM:135m", configuration: LLMRegistry.smolLM_135M_4bit, type: .llm),
-            ]
-        }
-        
-        return models
     }
     
-    /// Cache to store loaded model containers to avoid reloading.
-    private let modelCache = NSCache<NSString, ModelContainer>()
+    /// Cache to store loaded chat sessions to avoid reloading.
+    private final class SessionHolder: NSObject {
+        let container: ModelContainer
+        let session: ChatSession
+        init(container: ModelContainer, session: ChatSession) {
+            self.container = container
+            self.session = session
+        }
+    }
+    private let modelCache = NSCache<NSString, SessionHolder>()
     
     /// Currently loaded model name
     private(set) var currentModelName: String?
@@ -116,74 +76,78 @@ class MLXService {
     /// Access this property to monitor model download status.
     private(set) var modelDownloadProgress: Progress?
     
-    private init() {}
+    private init() {
+        // Initialize the cache with current available models
+        updateAvailableModelsCache()
+        
+        // Update cache whenever ModelManager changes
+        Task { @MainActor in
+            // Observe changes and update cache
+            // This ensures the cache stays in sync
+            updateAvailableModelsCache()
+        }
+    }
     
-    /// Get list of available models that are downloaded
-    func getAvailableModels() -> [String] {
-        return availableModels.map { $0.name }
+    /// Update the cached list of available models
+    func updateAvailableModelsCache() {
+        let modelNames = availableModels.map { $0.name }
+        Self.availableModelsCache.setObject(modelNames as NSArray, forKey: "models" as NSString)
+        
+        // Also cache model info for findModel
+        let modelInfo = availableModels.map { model in
+            ["name": model.name, "id": model.modelId]
+        }
+        Self.availableModelsCache.setObject(modelInfo as NSArray, forKey: "modelInfo" as NSString)
+    }
+    
+    /// Get list of available models that are downloaded (thread-safe)
+    nonisolated func getAvailableModels() -> [String] {
+        // Try to get from cache first
+        if let cached = Self.availableModelsCache.object(forKey: "models" as NSString) as? [String] {
+            return cached
+        }
+        
+        // Return empty list if cache is not populated
+        // The cache will be updated when models are loaded
+        return []
     }
     
     /// Find a model by name
-    func findModel(named name: String) -> LMModel? {
-        return availableModels.first { $0.name == name }
+    nonisolated func findModel(named name: String) -> LMModel? {
+        // Check if we have cached model info
+        if let cachedModels = Self.availableModelsCache.object(forKey: "modelInfo" as NSString) as? [[String: String]] {
+            for modelInfo in cachedModels {
+                if let modelName = modelInfo["name"], let modelId = modelInfo["id"], modelName == name {
+                    return LMModel(name: modelName, modelId: modelId)
+                }
+            }
+        }
+        
+        return nil
     }
     
-    /// Loads a model from the hub or retrieves it from cache.
-    /// - Parameter model: The model configuration to load
-    /// - Returns: A ModelContainer instance containing the loaded model
-    /// - Throws: Errors that might occur during model loading
-    private func load(model: LMModel) async throws -> ModelContainer {
-        // Set GPU memory limit to prevent out of memory issues
-        MLX.GPU.set(cacheLimit: 20 * 1024 * 1024)
-        
-        // Return cached model if available to avoid reloading
-        if let container = modelCache.object(forKey: model.name as NSString) {
-            return container
-        } else {
-            // Select appropriate factory based on model type
-            let factory: ModelFactory =
-                switch model.type {
-                case .llm:
-                    LLMModelFactory.shared
-                case .vlm:
-                    VLMModelFactory.shared
-                }
-            
-            // Check if we have a downloaded model path
-            let downloadedModel = ModelManager.shared.availableModels.first { mlxModel in
-                Self.modelMapping[mlxModel.id]?.name == model.name && mlxModel.isDownloaded
-            }
-            
-            let container: ModelContainer
-            
-            if let downloadedModel = downloadedModel {
-                // Load from local directory
-                let localURL = downloadedModel.localDirectory
-                container = try await factory.loadContainer(
-                    configuration: model.configuration,
-                    url: localURL
-                ) { progress in
-                    Task { @MainActor in
-                        self.modelDownloadProgress = progress
-                    }
-                }
-            } else {
-                // Load from hub (fallback for testing)
-                container = try await factory.loadContainer(
-                    hub: .default, configuration: model.configuration
-                ) { progress in
-                    Task { @MainActor in
-                        self.modelDownloadProgress = progress
-                    }
-                }
-            }
-            
-            // Cache the loaded model for future use
-            modelCache.setObject(container, forKey: model.name as NSString)
-            currentModelName = model.name
-            
-            return container
+    /// Loads a model container from local storage or retrieves it from cache.
+    private func load(model: LMModel) async throws -> SessionHolder {
+        if let holder = modelCache.object(forKey: model.name as NSString) {
+            return holder
         }
+
+        guard let downloadedModel = ModelManager.shared.availableModels.first(
+            where: { $0.id == model.modelId && $0.isDownloaded }
+        ) else {
+            throw NSError(domain: "MLXService", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Model not downloaded: \(model.name)"
+            ])
+        }
+
+        let localURL = downloadedModel.localDirectory
+        let container = try await loadModelContainer(directory: localURL)
+        let session = ChatSession(container)
+        let holder = SessionHolder(container: container, session: session)
+        modelCache.setObject(holder, forKey: model.name as NSString)
+        currentModelName = model.name
+        updateAvailableModelsCache()
+        return holder
     }
     
     /// Generates text based on the provided messages using the specified model.
@@ -200,59 +164,25 @@ class MLXService {
         temperature: Float = 0.7,
         maxTokens: Int = 2048
     ) async throws -> AsyncStream<String> {
-        // Load or retrieve model from cache
-        let modelContainer = try await load(model: model)
-        
-        // Map app-specific Message type to Chat.Message for model input
-        let chat = messages.map { message in
-            let role: Chat.Message.Role =
-                switch message.role {
-                case .assistant:
-                    .assistant
-                case .user:
-                    .user
-                case .system:
-                    .system
-                }
-            
-            // Process any attached media for VLM models
-            let images: [UserInput.Image] = message.images.map { imageURL in .url(imageURL) }
-            let videos: [UserInput.Video] = message.videos.map { videoURL in .url(videoURL) }
-            
-            return Chat.Message(
-                role: role, content: message.content, images: images, videos: videos)
-        }
-        
-        // Prepare input for model processing
-        let userInput = UserInput(
-            chat: chat, processing: .init(resize: .init(width: 1024, height: 1024)))
-        
-        // Generate response using the model
-        let generationStream = try await modelContainer.perform { (context: ModelContext) in
-            let lmInput = try await context.processor.prepare(input: userInput)
-            // Set generation parameters
-            let parameters = GenerateParameters(
-                temperature: temperature,
-                maxTokens: maxTokens
-            )
-            
-            return try MLXLMCommon.generate(
-                input: lmInput, parameters: parameters, context: context)
-        }
-        
-        // Convert Generation stream to String stream
+        // Load or retrieve chat session from cache
+        let holder = try await load(model: model)
+
+        // Build a simple prompt from chat messages
+        let prompt = buildPrompt(from: messages)
+
+        // Run generation using MLXLMCommon's ChatSession
         return AsyncStream<String> { continuation in
             Task {
+                // Stream if possible for responsiveness; if not, fall back to single response
+                let stream = holder.session.streamResponse(to: prompt)
                 do {
-                    for try await generation in generationStream {
-                        if let text = generation.text {
-                            continuation.yield(text)
-                        }
+                    for try await token in stream {
+                        continuation.yield(token)
                     }
-                    continuation.finish()
                 } catch {
-                    continuation.finish()
+                    // On error, finish the stream; upstream will send error JSON
                 }
+                continuation.finish()
             }
         }
     }
@@ -263,11 +193,41 @@ class MLXService {
         if currentModelName == name {
             currentModelName = nil
         }
+        
+        // Update available models cache
+        updateAvailableModelsCache()
     }
     
     /// Clear all cached models
     func clearCache() {
         modelCache.removeAllObjects()
         currentModelName = nil
+        
+        // Update available models cache
+        updateAvailableModelsCache()
     }
+}
+
+// MARK: - Prompt Formatting
+private func buildPrompt(from messages: [Message]) -> String {
+    var systemPrompt = ""
+    var conversation = ""
+    for message in messages {
+        switch message.role {
+        case .system:
+            if !systemPrompt.isEmpty { systemPrompt += "\n" }
+            systemPrompt += message.content
+        case .user:
+            conversation += "User: \(message.content)\n"
+        case .assistant:
+            conversation += "Assistant: \(message.content)\n"
+        }
+    }
+    let fullPrompt: String
+    if systemPrompt.isEmpty {
+        fullPrompt = conversation
+    } else {
+        fullPrompt = "\(systemPrompt)\n\n\(conversation)Assistant:"
+    }
+    return fullPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
 }

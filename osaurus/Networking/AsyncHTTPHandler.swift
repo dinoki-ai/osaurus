@@ -10,7 +10,6 @@ import NIOCore
 import NIOHTTP1
 
 /// Handles async operations for HTTP endpoints
-@MainActor
 class AsyncHTTPHandler {
     static let shared = AsyncHTTPHandler()
     
@@ -97,7 +96,7 @@ class AsyncHTTPHandler {
             ("Connection", "keep-alive")
         ]
         
-        // Send response headers
+        // Prepare response headers
         var responseHead = HTTPResponseHead(version: .http1_1, status: .ok)
         var nioHeaders = HTTPHeaders()
         for (name, value) in headers {
@@ -105,7 +104,11 @@ class AsyncHTTPHandler {
         }
         responseHead.headers = nioHeaders
         
-        context.write(handler.wrapOutboundOut(.head(responseHead)), promise: nil)
+        // Ensure header write happens on the channel's event loop
+        context.eventLoop.execute {
+            context.write(handler.wrapOutboundOut(.head(responseHead)), promise: nil)
+            context.flush()
+        }
         
         // Generate response ID
         let responseId = "chatcmpl-\(UUID().uuidString.prefix(8))"
@@ -141,14 +144,16 @@ class AsyncHTTPHandler {
                 system_fingerprint: nil
             )
             
-            // Send as SSE
+            // Send as SSE on the event loop
             if let jsonData = try? JSONEncoder().encode(chunk),
                let jsonString = String(data: jsonData, encoding: .utf8) {
                 let sseData = "data: \(jsonString)\n\n"
-                var buffer = context.channel.allocator.buffer(capacity: sseData.utf8.count)
-                buffer.writeString(sseData)
-                context.write(handler.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
-                context.flush()
+                context.eventLoop.execute {
+                    var buffer = context.channel.allocator.buffer(capacity: sseData.utf8.count)
+                    buffer.writeString(sseData)
+                    context.write(handler.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
+                    context.flush()
+                }
             }
         }
         
@@ -170,11 +175,13 @@ class AsyncHTTPHandler {
         if let jsonData = try? JSONEncoder().encode(finalChunk),
            let jsonString = String(data: jsonData, encoding: .utf8) {
             let sseData = "data: \(jsonString)\n\ndata: [DONE]\n\n"
-            var buffer = context.channel.allocator.buffer(capacity: sseData.utf8.count)
-            buffer.writeString(sseData)
-            context.writeAndFlush(handler.wrapOutboundOut(.body(.byteBuffer(buffer)))).whenComplete { _ in
-                context.writeAndFlush(handler.wrapOutboundOut(.end(nil))).whenComplete { _ in
-                    context.close(promise: nil)
+            context.eventLoop.execute {
+                var buffer = context.channel.allocator.buffer(capacity: sseData.utf8.count)
+                buffer.writeString(sseData)
+                context.writeAndFlush(handler.wrapOutboundOut(.body(.byteBuffer(buffer)))).whenComplete { _ in
+                    context.writeAndFlush(handler.wrapOutboundOut(.end(nil))).whenComplete { _ in
+                        context.close(promise: nil)
+                    }
                 }
             }
         }
@@ -218,7 +225,7 @@ class AsyncHTTPHandler {
                 )
             ],
             usage: Usage(
-                prompt_tokens: messages.reduce(0) { $0 + $1.content.count / 4 }, // Rough estimate
+                prompt_tokens: messages.reduce(0) { $0 + $1.content.count / 4 },
                 completion_tokens: tokenCount,
                 total_tokens: messages.reduce(0) { $0 + $1.content.count / 4 } + tokenCount
             ),
@@ -237,21 +244,23 @@ class AsyncHTTPHandler {
         let jsonData = try JSONEncoder().encode(response)
         let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
         
-        // Send response
-        var responseHead = HTTPResponseHead(version: .http1_1, status: status)
-        var buffer = context.channel.allocator.buffer(capacity: jsonString.utf8.count)
-        buffer.writeString(jsonString)
-        
-        var headers = HTTPHeaders()
-        headers.add(name: "Content-Type", value: "application/json; charset=utf-8")
-        headers.add(name: "Content-Length", value: String(buffer.readableBytes))
-        headers.add(name: "Connection", value: "close")
-        responseHead.headers = headers
-        
-        context.write(handler.wrapOutboundOut(.head(responseHead)), promise: nil)
-        context.write(handler.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
-        context.writeAndFlush(handler.wrapOutboundOut(.end(nil))).whenComplete { _ in
-            context.close(promise: nil)
+        // Send response on the event loop
+        context.eventLoop.execute {
+            var responseHead = HTTPResponseHead(version: .http1_1, status: status)
+            var buffer = context.channel.allocator.buffer(capacity: jsonString.utf8.count)
+            buffer.writeString(jsonString)
+            
+            var headers = HTTPHeaders()
+            headers.add(name: "Content-Type", value: "application/json; charset=utf-8")
+            headers.add(name: "Content-Length", value: String(buffer.readableBytes))
+            headers.add(name: "Connection", value: "close")
+            responseHead.headers = headers
+            
+            context.write(handler.wrapOutboundOut(.head(responseHead)), promise: nil)
+            context.write(handler.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
+            context.writeAndFlush(handler.wrapOutboundOut(.end(nil))).whenComplete { _ in
+                context.close(promise: nil)
+            }
         }
     }
 }

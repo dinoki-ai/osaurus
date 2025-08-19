@@ -10,16 +10,23 @@ osaurus/
 │   ├── AppDelegate.swift  # macOS app delegate
 │   └── osaurusApp.swift   # Main SwiftUI app entry point
 ├── Controllers/           # View controllers and business logic
-│   └── ServerController.swift  # Main server lifecycle controller
+│   ├── ServerController.swift  # Main server lifecycle controller
+│   └── ModelManager.swift      # MLX model download manager
 ├── Models/               # Data models
 │   ├── ServerConfiguration.swift  # Server configuration settings
-│   └── ServerHealth.swift        # Server health state enum
+│   ├── ServerHealth.swift        # Server health state enum
+│   ├── MLXModel.swift            # MLX model definitions
+│   └── OpenAIAPI.swift           # OpenAI API structures
 ├── Networking/           # Network layer components
-│   ├── HTTPHandler.swift # SwiftNIO HTTP request handler
-│   └── Router.swift      # HTTP request router
+│   ├── HTTPHandler.swift         # SwiftNIO HTTP request handler
+│   ├── Router.swift              # HTTP request router
+│   └── AsyncHTTPHandler.swift    # Async handler for streaming
+├── Services/             # Service layer
+│   └── MLXService.swift          # MLX model loading and inference
 ├── Views/               # SwiftUI views
 │   ├── ContentView.swift         # Main window view
-│   └── MenuBarControllerView.swift  # Menu bar UI
+│   ├── MenuBarControllerView.swift  # Menu bar UI
+│   └── ModelDownloadView.swift   # Model download interface
 └── osaurus.entitlements  # App entitlements
 ```
 
@@ -29,12 +36,16 @@ osaurus/
 - **SwiftNIO Based**: High-performance HTTP server using SwiftNIO
 - **Health Monitoring**: Built-in health check endpoint
 - **Clean Architecture**: Well-organized code with separation of concerns
+- **MLX Model Support**: Download and manage Apple MLX models for local AI inference
+- **OpenAI API Compatibility**: Compatible with OpenAI API clients and libraries
 
 ## API Endpoints
 
 - `GET /` - Root endpoint, returns server status
 - `GET /health` - Health check endpoint with JSON response
 - `POST /echo` - Echo endpoint for testing
+- `GET /models` - List available MLX models (OpenAI-compatible)
+- `POST /chat/completions` - Generate chat completions (OpenAI-compatible)
 
 ## Architecture
 
@@ -67,3 +78,5 @@ The application provides both a main window interface and a menu bar controller 
 - SwiftNIO for networking
 - SwiftUI for the user interface
 - AppKit for macOS-specific features
+- MLX-Swift for machine learning model inference
+- MLXLLM for language model support

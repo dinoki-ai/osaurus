@@ -27,10 +27,10 @@ final class HTTPHandler: ChannelInboundHandler {
         case .head(let head):
             requestHead = head
             
-        case .body(let buffer):
+        case .body(var buffer):
             // Collect body data
-            if let data = buffer.readData(length: buffer.readableBytes) {
-                requestBody.append(data)
+            if let bytes = buffer.readBytes(length: buffer.readableBytes) {
+                requestBody.append(Data(bytes))
             }
             
         case .end:

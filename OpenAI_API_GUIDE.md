@@ -108,20 +108,20 @@ data: {"id":"chatcmpl-abc123","object":"chat.completion.chunk","created":1738193
 data: [DONE]
 ```
 
-## Model Mapping
+## Model Naming
 
-The following models from ModelManager are mapped to OpenAI-compatible names:
+Models are automatically named based on their display names in ModelManager. The API converts the model names to lowercase and replaces spaces with hyphens. For example:
 
-| Downloaded Model ID                              | API Model Name        |
-| ------------------------------------------------ | --------------------- |
-| mlx-community/Llama-3.2-3B-Instruct-4bit         | llama-3.2-3b-instruct |
-| mlx-community/Llama-3.2-1B-Instruct-4bit         | llama-3.2-1b-instruct |
-| mlx-community/Qwen2.5-7B-Instruct-4bit           | qwen2.5-7b-instruct   |
-| mlx-community/Qwen2.5-3B-Instruct-4bit           | qwen2.5-3b-instruct   |
-| mlx-community/gemma-2-9b-it-4bit                 | gemma-2-9b-instruct   |
-| mlx-community/gemma-2-2b-it-4bit                 | gemma-2-2b-instruct   |
-| mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit | deepseek-r1-1.5b      |
-| mlx-community/OpenELM-3B-Instruct-4bit           | openelm-3b-instruct   |
+| Downloaded Model         | API Model Name           |
+| ------------------------ | ------------------------ |
+| Llama 3.2 3B Instruct    | llama-3.2-3b-instruct    |
+| Llama 3.2 1B Instruct    | llama-3.2-1b-instruct    |
+| Qwen 2.5 7B Instruct     | qwen-2.5-7b-instruct     |
+| Qwen 2.5 3B Instruct     | qwen-2.5-3b-instruct     |
+| Gemma 2 9B Instruct      | gemma-2-9b-instruct      |
+| Gemma 2 2B Instruct      | gemma-2-2b-instruct      |
+| DeepSeek-R1 Distill 1.5B | deepseek-r1-distill-1.5b |
+| OpenELM 3B (GPT-style)   | openelm-3b-(gpt-style)   |
 
 ## Usage with OpenAI Python Library
 
@@ -179,5 +179,3 @@ for chunk in stream:
 4. **GPU Acceleration**: MLX automatically uses Apple Silicon GPU acceleration when available.
 
 5. **Context Length**: Each model has different context length limitations. Refer to the model documentation for specifics.
-
-6. **Vision Models**: Vision-language models (VLMs) are supported but require special handling for image inputs (not yet implemented in the API).

@@ -135,9 +135,9 @@ public struct Router {
             return errorResponse(message: "Server configuration error", statusCode: .internalServerError)
         }
         
-        // Handle async generation
-        Task { @MainActor in
-            await AsyncHTTPHandler.shared.handleChatCompletion(
+        // Handle async generation without MainActor; writes will be marshaled to the event loop
+        Task {
+            AsyncHTTPHandler.shared.handleChatCompletion(
                 request: request,
                 context: context,
                 handler: handler

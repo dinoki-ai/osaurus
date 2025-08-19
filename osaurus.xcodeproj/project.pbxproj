@@ -12,6 +12,10 @@
 		F0BB3CA42E52234700895593 /* NIOCore in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA32E52234700895593 /* NIOCore */; };
 		F0BB3CA62E52240500895593 /* NIOHTTP1 in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA52E52240500895593 /* NIOHTTP1 */; };
 		F0C60D622E53DE140028ED4F /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = F0C60D612E53DE140028ED4F /* MLX */; };
+		F0C60D722E5491A10028ED4F /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = F0C60D712E5491A10028ED4F /* MLXLLM */; };
+		F0C60D742E5491A10028ED4F /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = F0C60D732E5491A10028ED4F /* MLXLMCommon */; };
+		F0C60D762E5491A10028ED4F /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = F0C60D752E5491A10028ED4F /* MLXVLM */; };
+		F0C60E872E54A26A0028ED4F /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = F0C60E862E54A26A0028ED4F /* Transformers */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,11 +64,15 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F0C60D722E5491A10028ED4F /* MLXLLM in Frameworks */,
 				F0BB3CA42E52234700895593 /* NIOCore in Frameworks */,
 				F0BB3CA02E52234700895593 /* NIO in Frameworks */,
 				F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */,
 				F0C60D622E53DE140028ED4F /* MLX in Frameworks */,
 				F0BB3CA62E52240500895593 /* NIOHTTP1 in Frameworks */,
+				F0C60E872E54A26A0028ED4F /* Transformers in Frameworks */,
+				F0C60D762E5491A10028ED4F /* MLXVLM in Frameworks */,
+				F0C60D742E5491A10028ED4F /* MLXLMCommon in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -91,6 +99,7 @@
 				F0BB3C282E51FBCC00895593 /* osaurus */,
 				F0BB3C372E51FBCD00895593 /* osaurusTests */,
 				F0BB3C412E51FBCD00895593 /* osaurusUITests */,
+				F0C60E852E54A26A0028ED4F /* Frameworks */,
 				F0BB3C272E51FBCC00895593 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -103,6 +112,13 @@
 				F0BB3C3E2E51FBCD00895593 /* osaurusUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		F0C60E852E54A26A0028ED4F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -130,6 +146,10 @@
 				F0BB3CA32E52234700895593 /* NIOCore */,
 				F0BB3CA52E52240500895593 /* NIOHTTP1 */,
 				F0C60D612E53DE140028ED4F /* MLX */,
+				F0C60D712E5491A10028ED4F /* MLXLLM */,
+				F0C60D732E5491A10028ED4F /* MLXLMCommon */,
+				F0C60D752E5491A10028ED4F /* MLXVLM */,
+				F0C60E862E54A26A0028ED4F /* Transformers */,
 			);
 			productName = osaurus;
 			productReference = F0BB3C262E51FBCC00895593 /* osaurus.app */;
@@ -216,6 +236,8 @@
 			packageReferences = (
 				F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */,
 				F0C60D602E53DE140028ED4F /* XCRemoteSwiftPackageReference "mlx-swift" */,
+				F0C60D702E5491A10028ED4F /* XCRemoteSwiftPackageReference "mlx-swift-examples" */,
+				F0D0T1002E55AAAA0028ED4F /* XCRemoteSwiftPackageReference "swift-transformers" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F0BB3C272E51FBCC00895593 /* Products */;
@@ -593,6 +615,22 @@
 				minimumVersion = 0.25.6;
 			};
 		};
+		F0C60D702E5491A10028ED4F /* XCRemoteSwiftPackageReference "mlx-swift-examples" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-examples";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.25.5;
+			};
+		};
+		F0D0T1002E55AAAA0028ED4F /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-transformers";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.1.22;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -620,6 +658,26 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F0C60D602E53DE140028ED4F /* XCRemoteSwiftPackageReference "mlx-swift" */;
 			productName = MLX;
+		};
+		F0C60D712E5491A10028ED4F /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F0C60D702E5491A10028ED4F /* XCRemoteSwiftPackageReference "mlx-swift-examples" */;
+			productName = MLXLLM;
+		};
+		F0C60D732E5491A10028ED4F /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F0C60D702E5491A10028ED4F /* XCRemoteSwiftPackageReference "mlx-swift-examples" */;
+			productName = MLXLMCommon;
+		};
+		F0C60D752E5491A10028ED4F /* MLXVLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F0C60D702E5491A10028ED4F /* XCRemoteSwiftPackageReference "mlx-swift-examples" */;
+			productName = MLXVLM;
+		};
+		F0C60E862E54A26A0028ED4F /* Transformers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F0D0T1002E55AAAA0028ED4F /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Transformers;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

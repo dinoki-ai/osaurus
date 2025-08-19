@@ -29,10 +29,28 @@ struct MLXModel: Identifiable, Codable {
     /// Check if model is downloaded
     var isDownloaded: Bool {
         let fileManager = FileManager.default
-        return requiredFiles.allSatisfy { fileName in
+        
+        // Required JSON metadata files commonly used by transformers
+        let requiredJsonFiles = [
+            "config.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "special_tokens_map.json"
+        ]
+        
+        // All JSON files must exist
+        let jsonOk = requiredJsonFiles.allSatisfy { fileName in
             let filePath = localDirectory.appendingPathComponent(fileName)
             return fileManager.fileExists(atPath: filePath.path)
         }
+        guard jsonOk else { return false }
+        
+        // At least one weights file must exist
+        if let items = try? fileManager.contentsOfDirectory(atPath: localDirectory.path) {
+            let hasWeights = items.contains { $0.hasSuffix(".safetensors") }
+            return hasWeights
+        }
+        return false
     }
 }
 

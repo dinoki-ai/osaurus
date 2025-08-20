@@ -10,7 +10,7 @@ import AppKit
 import Combine
 
 @MainActor
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
     var serverController: ServerController? {
         didSet {
             setupObservers()
@@ -19,10 +19,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private var statusItem: NSStatusItem?
     private var cancellables: Set<AnyCancellable> = []
+    private weak var mainWindow: NSWindow?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Configure app to stay in dock
-        NSApp.setActivationPolicy(.regular)
+        // Configure as menu bar app (hide Dock icon)
+        NSApp.setActivationPolicy(.accessory)
         
         // App has launched
         print("Osaurus server app launched")
@@ -39,6 +40,57 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.toolTip = "Osaurus Server"
         }
         statusItem = item
+        updateStatusItemAndMenu()
+    }
+
+    // MARK: - Window Management
+
+    func setMainWindow(_ window: NSWindow) {
+        mainWindow = window
+        window.delegate = self
+        configureMainWindowAppearance(window)
+    }
+
+    private var isMainWindowVisible: Bool {
+        guard let window = mainWindow else { return false }
+        return window.isVisible
+    }
+    
+    private func configureMainWindowAppearance(_ window: NSWindow) {
+        // Hide title bar visuals but keep close button
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.toolbar = nil
+        
+        // Only allow close; disable resize/minimize/zoom
+        window.styleMask.remove(.resizable)
+        window.styleMask.remove(.miniaturizable)
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
+        
+        // Keep the window always on top
+        window.level = .floating
+    }
+
+    @objc private func toggleWindowAction(_ sender: Any?) {
+        toggleMainWindowVisibility()
+    }
+
+    private func toggleMainWindowVisibility() {
+        if let window = mainWindow {
+            if window.isVisible {
+                window.orderOut(nil)
+            } else {
+                NSApp.activate(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
+            }
+        } else if let window = NSApp.windows.first {
+            // Fallback: if we haven't captured it yet, capture and show
+            setMainWindow(window)
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+        }
         updateStatusItemAndMenu()
     }
     
@@ -89,6 +141,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.delegate = self
+
         let statusTitle: String
         if let server = serverController {
             switch server.serverHealth {
@@ -110,6 +164,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         headerItem.isEnabled = false
         menu.addItem(headerItem)
         menu.addItem(.separator())
+
+        // Show/Hide Window toggle
+        let toggleTitle = isMainWindowVisible ? "Hide Window" : "Show Window"
+        let toggleWindowItem = NSMenuItem(title: toggleTitle, action: #selector(toggleWindowAction(_:)), keyEquivalent: "")
+        toggleWindowItem.target = self
+        toggleWindowItem.tag = 1001
+        menu.addItem(toggleWindowItem)
         
         // Start/Stop toggle
         if let server = serverController {
@@ -125,12 +186,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             toggleItem.isEnabled = !isBusy
             menu.addItem(toggleItem)
             
-            // Open in Browser
-            let openItem = NSMenuItem(title: "Open in Browser", action: #selector(openInBrowserAction(_:)), keyEquivalent: "")
-            openItem.target = self
-            openItem.isEnabled = server.isRunning
-            menu.addItem(openItem)
-            
             // Set Port… (disabled while running)
             let setPortItem = NSMenuItem(title: "Set Port…", action: #selector(setPortAction(_:)), keyEquivalent: "")
             setPortItem.target = self
@@ -144,11 +199,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         menu.addItem(.separator())
-        
-        // Show Window
-        let showWindowItem = NSMenuItem(title: "Show Window", action: #selector(showWindowAction(_:)), keyEquivalent: "")
-        showWindowItem.target = self
-        menu.addItem(showWindowItem)
         
         // Quit
         let quitItem = NSMenuItem(title: "Quit", action: #selector(quitAction(_:)), keyEquivalent: "q")
@@ -174,16 +224,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    @objc private func openInBrowserAction(_ sender: Any?) {
-        guard let serverController, serverController.isRunning else { return }
-        let url = URL(string: "http://127.0.0.1:\(serverController.port)")!
-        NSWorkspace.shared.open(url)
+    // MARK: - NSWindowDelegate
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        // Hide instead of closing
+        sender.orderOut(nil)
+        updateStatusItemAndMenu()
+        return false
     }
-    
-    @objc private func showWindowAction(_ sender: Any?) {
-        NSApp.activate(ignoringOtherApps: true)
-        if let window = NSApp.windows.first {
-            window.makeKeyAndOrderFront(nil)
+
+    // MARK: - NSMenuDelegate
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        if let toggleItem = menu.item(withTag: 1001) {
+            toggleItem.title = isMainWindowVisible ? "Hide Window" : "Show Window"
         }
     }
     

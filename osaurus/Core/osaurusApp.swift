@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 @main
 struct osaurusApp: SwiftUI.App {
@@ -19,9 +20,15 @@ struct osaurusApp: SwiftUI.App {
                 .onAppear {
                     // Pass server controller to app delegate
                     appDelegate.serverController = serverController
+                    // Capture the main window and register with app delegate for show/hide behavior
+                    DispatchQueue.main.async {
+                        if let window = NSApp.windows.first {
+                            appDelegate.setMainWindow(window)
+                        }
+                    }
                 }
         }
-        .windowStyle(.automatic)
-        .windowToolbarStyle(.unified(showsTitle: true))
+        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified(showsTitle: false))
     }
 }

@@ -8,7 +8,7 @@
 import Foundation
 
 /// Represents the health state of the server
-public enum ServerHealth {
+public enum ServerHealth: Equatable {
     case stopped
     case starting
     case running

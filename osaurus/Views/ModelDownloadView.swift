@@ -14,16 +14,27 @@ struct ModelDownloadView: View {
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            headerView
+        ZStack {
+            // Background gradient
+            LinearGradient(
+                colors: [
+                    Color(NSColor.windowBackgroundColor),
+                    Color(NSColor.windowBackgroundColor).opacity(0.8)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
             
-            Divider()
-            
-            // Model list
-            modelListView
+            VStack(spacing: 0) {
+                // Header
+                headerView
+                
+                // Model list
+                modelListView
+            }
         }
-        .frame(minWidth: 600, minHeight: 500)
+        .frame(minWidth: 700, minHeight: 600)
         .alert("Delete Model", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
@@ -38,17 +49,37 @@ struct ModelDownloadView: View {
     
     private var headerView: some View {
         HStack {
-            Image(systemName: "square.and.arrow.down")
-                .font(.largeTitle)
-                .foregroundColor(.accentColor)
+            // Logo with gradient background
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.green, Color.teal],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 50, height: 50)
+                
+                Image(systemName: "cube.box.fill")
+                    .font(.system(size: 26))
+                    .foregroundColor(.white)
+            }
+            .shadow(color: Color.green.opacity(0.3), radius: 8, x: 0, y: 4)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text("LLM Model Manager")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                Text("Model Manager")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.primary, Color.primary.opacity(0.8)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                 
                 Text("Download and manage Large Language Models for MLX")
-                    .font(.caption)
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.secondary)
             }
             
@@ -56,24 +87,36 @@ struct ModelDownloadView: View {
             
             VStack(alignment: .trailing, spacing: 4) {
                 Text("Total Downloaded")
-                    .font(.caption)
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.secondary)
                 Text(modelManager.totalDownloadedSizeString)
-                    .font(.headline)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.green, Color.teal],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
             }
+            .padding(.trailing, 12)
             
-            Button("Done") {
-                dismiss()
-            }
-            .buttonStyle(.borderedProminent)
+            GradientButton(
+                title: "Done",
+                icon: "checkmark",
+                action: { dismiss() }
+            )
         }
-        .padding()
-        .background(Color(NSColor.windowBackgroundColor))
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .background(
+            GlassBackground(cornerRadius: 0, opacity: 0.05)
+        )
     }
     
     private var modelListView: some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: 16) {
                 ForEach(modelManager.availableModels) { model in
                     ModelRowView(
                         model: model,
@@ -85,11 +128,14 @@ struct ModelDownloadView: View {
                             showDeleteConfirmation = true
                         }
                     )
+                    .transition(.asymmetric(
+                        insertion: .scale.combined(with: .opacity),
+                        removal: .scale.combined(with: .opacity)
+                    ))
                 }
             }
-            .padding()
+            .padding(24)
         }
-        .background(Color(NSColor.controlBackgroundColor))
     }
 }
 
@@ -103,64 +149,71 @@ struct ModelRowView: View {
     @State private var isHovering = false
     
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 16) {
-                // Model icon
-                Image(systemName: "text.bubble")
-                    .font(.largeTitle)
-                    .foregroundColor(.accentColor)
-                    .frame(width: 50)
-                
-                // Model info
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(model.name)
-                        .font(.headline)
+        SimpleCard(padding: 0) {
+            VStack(spacing: 0) {
+                HStack(spacing: 16) {
+                    // Model icon with gradient
+                    IconBadge(
+                        icon: "text.bubble.fill",
+                        color: model.isDownloaded ? .green : .blue,
+                        size: 50
+                    )
                     
-                    Text(model.description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                    
-                    HStack {
-                        Label(model.sizeString, systemImage: "internaldrive")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    // Model info
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(model.name)
+                            .font(.system(size: 16, weight: .semibold))
                         
-                        if model.isDownloaded {
-                            Label("Downloaded", systemImage: "checkmark.circle.fill")
-                                .font(.caption)
-                                .foregroundColor(.green)
+                        Text(model.description)
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                        
+                        HStack(spacing: 12) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "internaldrive")
+                                    .font(.system(size: 11))
+                                Text(model.sizeString)
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            .foregroundColor(.secondary)
+                            
+                            if model.isDownloaded {
+                                StatusBadge(
+                                    status: "Downloaded",
+                                    color: .green,
+                                    isAnimating: false
+                                )
+                            }
                         }
                     }
+                    
+                    Spacer()
+                    
+                    // Action buttons
+                    actionButton
                 }
+                .padding(20)
                 
-                Spacer()
-                
-                // Action buttons
-                actionButton
-            }
-            .padding()
-            
-            // Progress bar
-            if case .downloading(let progress) = downloadState {
-                ProgressView(value: progress)
-                    .progressViewStyle(.linear)
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
+                // Progress bar
+                if case .downloading(let progress) = downloadState {
+                    VStack(spacing: 8) {
+                        SimpleProgressBar(progress: progress)
+                            .padding(.horizontal, 20)
+                        
+                        Text("\(Int(progress * 100))% downloaded")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.bottom, 16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isHovering ? Color(NSColor.controlColor) : Color(NSColor.controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-        )
+        .scaleEffect(isHovering ? 1.02 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isHovering)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isHovering = hovering
-            }
+            isHovering = hovering
         }
     }
     
@@ -168,30 +221,74 @@ struct ModelRowView: View {
     private var actionButton: some View {
         switch downloadState {
         case .notStarted:
-            Button(action: onDownload) {
-                Label("Download", systemImage: "arrow.down.circle")
-            }
-            .buttonStyle(.borderedProminent)
+            GradientButton(
+                title: "Download",
+                icon: "arrow.down.circle.fill",
+                action: onDownload
+            )
             
         case .downloading:
             Button(action: onCancel) {
-                Label("Cancel", systemImage: "xmark.circle")
+                HStack(spacing: 6) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                    Text("Cancel")
+                        .font(.system(size: 14, weight: .medium))
+                }
+                .foregroundColor(.orange)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.orange.opacity(0.15))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                        )
+                )
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(PlainButtonStyle())
             
         case .completed:
             Button(action: onDelete) {
-                Label("Delete", systemImage: "trash")
+                HStack(spacing: 6) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
+                    Text("Delete")
+                        .font(.system(size: 14, weight: .medium))
+                }
+                .foregroundColor(.red)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.red.opacity(0.15))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                        )
+                )
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(PlainButtonStyle())
             
         case .failed(let error):
-            VStack(alignment: .trailing) {
-                Text("Failed")
-                    .font(.caption)
-                    .foregroundColor(.red)
-                Button("Retry", action: onDownload)
-                    .buttonStyle(.link)
+            VStack(alignment: .trailing, spacing: 8) {
+                StatusBadge(
+                    status: "Failed",
+                    color: .red,
+                    isAnimating: false
+                )
+                
+                Button(action: onDownload) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12))
+                        Text("Retry")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundColor(.blue)
+                }
+                .buttonStyle(PlainButtonStyle())
             }
         }
     }

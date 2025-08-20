@@ -250,8 +250,8 @@ struct ContentView: View {
     
     private func startHealthCheck() {
         Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
-            if server.isRunning {
-                Task { @MainActor in
+            Task { @MainActor in
+                if server.isRunning {
                     isHealthy = await server.checkServerHealth()
                     lastHealthCheck = Date()
                 }

@@ -27,11 +27,7 @@ final class ModelManager: NSObject, ObservableObject {
     @Published var availableModels: [MLXModel] = []
     @Published var downloadStates: [String: DownloadState] = [:]
     @Published var isLoadingModels: Bool = false
-    
-    /// Curated list of suggested models surfaced in the UI
-    var suggestedModels: [MLXModel] {
-        return Self.curatedSuggestedModels
-    }
+    @Published var suggestedModels: [MLXModel] = ModelManager.curatedSuggestedModels
     
     // MARK: - Properties
     nonisolated(unsafe) static var modelsDirectory: URL = {
@@ -85,6 +81,10 @@ final class ModelManager: NSObject, ObservableObject {
                     for model in models {
                         self.downloadStates[model.id] = model.isDownloaded ? .completed : .notStarted
                     }
+                    // Ensure suggested models also have state entries
+                    for sm in self.suggestedModels {
+                        self.downloadStates[sm.id] = sm.isDownloaded ? .completed : .notStarted
+                    }
                     self.isLoadingModels = false
                 }
             } catch {
@@ -113,6 +113,7 @@ final class ModelManager: NSObject, ObservableObject {
                 let newDescription = Self.buildDescription(from: detailed)
                 if totalSize > 0 || newDescription != model.description {
                     await MainActor.run {
+                        // Update in available models if present
                         if let idx = self.availableModels.firstIndex(where: { $0.id == model.id }) {
                             let current = self.availableModels[idx]
                             let updated = MLXModel(
@@ -125,6 +126,19 @@ final class ModelManager: NSObject, ObservableObject {
                             )
                             self.availableModels[idx] = updated
                         }
+                        // Update in suggested models if present, but preserve curated description
+                        if let sidx = self.suggestedModels.firstIndex(where: { $0.id == model.id }) {
+                            let current = self.suggestedModels[sidx]
+                            let updated = MLXModel(
+                                id: current.id,
+                                name: current.name,
+                                description: current.description, // keep curated description
+                                size: totalSize > 0 ? totalSize : current.size,
+                                downloadURL: current.downloadURL,
+                                requiredFiles: current.requiredFiles
+                            )
+                            self.suggestedModels[sidx] = updated
+                        }
                     }
                 }
             } catch {
@@ -135,6 +149,11 @@ final class ModelManager: NSObject, ObservableObject {
     
     /// Download a model using Hugging Face Hub snapshot API
     func downloadModel(_ model: MLXModel) {
+        // If already present on disk, mark as completed and no-op
+        if model.isDownloaded {
+            downloadStates[model.id] = .completed
+            return
+        }
         let state = downloadStates[model.id] ?? .notStarted
         switch state {
         case .downloading, .completed:
@@ -284,9 +303,25 @@ final class ModelManager: NSObject, ObservableObject {
     
     /// Get total size of downloaded models
     var totalDownloadedSize: Int64 {
-        availableModels
+        // Build a unique list of models by id from both available and suggested
+        let combined = (availableModels + suggestedModels)
+        let uniqueById: [String: MLXModel] = combined.reduce(into: [:]) { dict, model in
+            if dict[model.id] == nil { dict[model.id] = model }
+        }
+        // Sum actual on-disk sizes for models that are fully downloaded
+        return uniqueById.values
             .filter { $0.isDownloaded }
-            .reduce(0) { $0 + $1.size }
+            .reduce(Int64(0)) { partial, model in
+                partial + (Self.directoryAllocatedSize(at: model.localDirectory) ?? 0)
+            }
+    }
+
+    /// Effective state for a model combining in-memory state with on-disk detection
+    func effectiveDownloadState(for model: MLXModel) -> DownloadState {
+        if case .downloading = downloadStates[model.id] {
+            return downloadStates[model.id] ?? .notStarted
+        }
+        return model.isDownloaded ? .completed : (downloadStates[model.id] ?? .notStarted)
     }
     
     var totalDownloadedSizeString: String {
@@ -326,6 +361,30 @@ final class ModelManager: NSObject, ObservableObject {
             }
         }
     }
+
+    /// Compute allocated size on disk for a directory (recursively)
+    /// Falls back to logical file size when allocated size is unavailable
+    private static func directoryAllocatedSize(at url: URL) -> Int64? {
+        let fileManager = FileManager.default
+        var total: Int64 = 0
+        guard let enumerator = fileManager.enumerator(at: url, includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey, .isRegularFileKey], options: [], errorHandler: nil) else {
+            return nil
+        }
+        for case let fileURL as URL in enumerator {
+            do {
+                let resourceValues = try fileURL.resourceValues(forKeys: [.isRegularFileKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey])
+                guard resourceValues.isRegularFile == true else { continue }
+                if let allocated = resourceValues.totalFileAllocatedSize ?? resourceValues.fileAllocatedSize {
+                    total += Int64(allocated)
+                } else if let size = resourceValues.fileSize {
+                    total += Int64(size)
+                }
+            } catch {
+                continue
+            }
+        }
+        return total
+    }
 }
 
 // MARK: - Dynamic model discovery (Hugging Face)
@@ -333,6 +392,7 @@ final class ModelManager: NSObject, ObservableObject {
 private extension ModelManager {
     /// Fully curated models with descriptions we control. Order matters.
     static let curatedSuggestedModels: [MLXModel] = [
+        // Llama family — 3 sizes
         MLXModel(
             id: "mlx-community/Llama-3.2-1B-Instruct-4bit",
             name: friendlyName(from: "mlx-community/Llama-3.2-1B-Instruct-4bit"),
@@ -342,27 +402,11 @@ private extension ModelManager {
             requiredFiles: curatedRequiredFiles
         ),
         MLXModel(
-            id: "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-            name: friendlyName(from: "mlx-community/Qwen2.5-1.5B-Instruct-4bit"),
-            description: "Small but capable. Strong instruction following with tiny memory footprint.",
+            id: "mlx-community/Llama-3.2-3B-Instruct-4bit",
+            name: friendlyName(from: "mlx-community/Llama-3.2-3B-Instruct-4bit"),
+            description: "Great quality/speed balance. Strong general assistant at a small memory footprint.",
             size: 0,
-            downloadURL: "https://huggingface.co/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
-            requiredFiles: curatedRequiredFiles
-        ),
-        MLXModel(
-            id: "mlx-community/Gemma-2-2B-IT-4bit",
-            name: friendlyName(from: "mlx-community/Gemma-2-2B-IT-4bit"),
-            description: "Balanced quality and speed. A solid general-purpose assistant at 2B params.",
-            size: 0,
-            downloadURL: "https://huggingface.co/mlx-community/Gemma-2-2B-IT-4bit",
-            requiredFiles: curatedRequiredFiles
-        ),
-        MLXModel(
-            id: "mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit",
-            name: friendlyName(from: "mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit"),
-            description: "Reasoning-focused distilled model. Good for structured steps and chain-of-thought style prompts.",
-            size: 0,
-            downloadURL: "https://huggingface.co/mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit",
+            downloadURL: "https://huggingface.co/mlx-community/Llama-3.2-3B-Instruct-4bit",
             requiredFiles: curatedRequiredFiles
         ),
         MLXModel(
@@ -373,12 +417,86 @@ private extension ModelManager {
             downloadURL: "https://huggingface.co/mlx-community/Llama-3.1-8B-Instruct-4bit",
             requiredFiles: curatedRequiredFiles
         ),
+
+        // Qwen family — 3 sizes
+        MLXModel(
+            id: "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            name: friendlyName(from: "mlx-community/Qwen2.5-1.5B-Instruct-4bit"),
+            description: "Small but capable. Strong instruction following with tiny memory footprint.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
+        MLXModel(
+            id: "mlx-community/Qwen2.5-3B-Instruct-4bit",
+            name: friendlyName(from: "mlx-community/Qwen2.5-3B-Instruct-4bit"),
+            description: "Well-rounded 3B assistant. Good multilingual reasoning and instruction following.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/Qwen2.5-3B-Instruct-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
         MLXModel(
             id: "mlx-community/Qwen2.5-7B-Instruct-4bit",
             name: friendlyName(from: "mlx-community/Qwen2.5-7B-Instruct-4bit"),
             description: "High-quality 7B assistant. Great all-rounder with strong instruction tuning.",
             size: 0,
             downloadURL: "https://huggingface.co/mlx-community/Qwen2.5-7B-Instruct-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
+
+        // Gemma family — 2 sizes (2B, 9B)
+        MLXModel(
+            id: "mlx-community/Gemma-2-2B-IT-4bit",
+            name: friendlyName(from: "mlx-community/Gemma-2-2B-IT-4bit"),
+            description: "Balanced quality and speed. A solid general-purpose assistant at 2B params.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/Gemma-2-2B-IT-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
+        MLXModel(
+            id: "mlx-community/Gemma-2-9B-IT-4bit",
+            name: friendlyName(from: "mlx-community/Gemma-2-9B-IT-4bit"),
+            description: "Quality-focused 9B Gemma-2 IT. Strong general assistant if you can spare the memory.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/Gemma-2-9B-IT-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
+
+        // Reasoning-focused choices
+        MLXModel(
+            id: "mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit",
+            name: friendlyName(from: "mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit"),
+            description: "Reasoning-focused distilled model. Good for structured steps and chain-of-thought style prompts.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
+
+        // Popular general models (extra variety)
+        MLXModel(
+            id: "mlx-community/Mistral-7B-Instruct-4bit",
+            name: friendlyName(from: "mlx-community/Mistral-7B-Instruct-4bit"),
+            description: "Popular 7B instruct model. Good general assistant with efficient runtime.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/Mistral-7B-Instruct-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
+        MLXModel(
+            id: "mlx-community/Phi-3-mini-4k-instruct-4bit",
+            name: friendlyName(from: "mlx-community/Phi-3-mini-4k-instruct-4bit"),
+            description: "Very small and speedy. Great for lightweight tasks and constrained devices.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/Phi-3-mini-4k-instruct-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
+
+        // Kimi
+        MLXModel(
+            id: "mlx-community/Kimi-VL-A3B-Thinking-4bit",
+            name: friendlyName(from: "mlx-community/Kimi-VL-A3B-Thinking-4bit"),
+            description: "Kimi VL A3B thinking variant (4-bit). Versatile assistant with strong reasoning.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/Kimi-VL-A3B-Thinking-4bit",
             requiredFiles: curatedRequiredFiles
         )
     ]
@@ -622,4 +740,5 @@ private extension ModelManager {
         return nil
     }
 }
+
 

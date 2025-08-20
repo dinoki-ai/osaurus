@@ -153,7 +153,7 @@ struct ModelDownloadView: View {
                         ForEach(displayedModels) { model in
                             ModelRowView(
                                 model: model,
-                                downloadState: modelManager.downloadStates[model.id] ?? .notStarted,
+                                downloadState: modelManager.effectiveDownloadState(for: model),
                                 onDownload: { modelManager.downloadModel(model) },
                                 onCancel: { modelManager.cancelDownload(model.id) },
                                 onDelete: {

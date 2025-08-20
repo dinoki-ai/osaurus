@@ -10,6 +10,9 @@ import AppKit
 
 struct ContentView: View {
     @EnvironmentObject var server: ServerController
+    // Popover customization
+    var isPopover: Bool = false
+    var onClose: (() -> Void)? = nil
     @State private var portString: String = "8080"
     @State private var showError: Bool = false
     @State private var isHealthy: Bool = false
@@ -31,7 +34,7 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
             
-            VStack(spacing: 16) {
+            VStack(spacing: isPopover ? 12 : 16) {
                 // Header
                 headerView
                 
@@ -57,7 +60,10 @@ struct ContentView: View {
                 Spacer()
             }
         }
-        .frame(width: 420, height: server.isRunning ? 380 : 200)
+        .frame(
+            width: isPopover ? 380 : 420,
+            height: isPopover ? (server.isRunning ? 320 : 220) : (server.isRunning ? 380 : 200)
+        )
         .onAppear {
             portString = String(server.port)
             startHealthCheck()
@@ -113,9 +119,28 @@ struct ContentView: View {
             }
             .buttonStyle(PlainButtonStyle())
             .help("Configuration")
+
+            if isPopover {
+                Button(action: { onClose?() }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            Circle()
+                                .fill(Color(NSColor.controlBackgroundColor))
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Close")
+            }
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 16)
+        .padding(.vertical, isPopover ? 12 : 16)
         .background(
             GlassBackground(cornerRadius: 0, opacity: 0.05)
         )

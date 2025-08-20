@@ -4,7 +4,7 @@ This guide explains how to use the OpenAI-compatible API endpoints in Osaurus.
 
 ## Available Endpoints
 
-### 1. List Models - `GET /models`
+### 1. List Models - `GET /models` (also available at `GET /v1/models`)
 
 Returns a list of available models that are currently downloaded and ready to use.
 
@@ -34,14 +34,14 @@ Example response:
 }
 ```
 
-### 2. Chat Completions - `POST /chat/completions`
+### 2. Chat Completions - `POST /chat/completions` (also available at `POST /v1/chat/completions`)
 
 Generate chat completions using the specified model.
 
 #### Non-streaming Request
 
 ```bash
-curl http://localhost:8080/chat/completions \
+curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama-3.2-3b-instruct",
@@ -83,7 +83,7 @@ Example response:
 #### Streaming Request
 
 ```bash
-curl http://localhost:8080/chat/completions \
+curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama-3.2-3b-instruct",
@@ -132,7 +132,7 @@ from openai import OpenAI
 
 # Point to your local Osaurus server
 client = OpenAI(
-    base_url="http://localhost:8080",
+    base_url="http://localhost:8080/v1",  # Use /v1 for OpenAI client compatibility
     api_key="not-needed"  # Osaurus doesn't require authentication
 )
 

@@ -33,15 +33,6 @@ public struct Router {
         case ("GET", "/"):
             return rootEndpoint()
             
-        case ("POST", "/echo"):
-            return echoEndpoint()
-            
-        case ("POST", "/transcribe"):
-            return transcribeEndpoint()
-            
-        case ("GET", "/transcribe/status"):
-            return transcriptionStatusEndpoint()
-            
         case ("GET", "/models"):
             return modelsEndpoint()
         case ("GET", "/v1/models"):
@@ -75,40 +66,8 @@ public struct Router {
         return (.ok, [("Content-Type", "text/plain; charset=utf-8")], "Osaurus Server is running! 🦕")
     }
     
-    private func echoEndpoint() -> (HTTPResponseStatus, [(String, String)], String) {
-        return (.ok, [("Content-Type", "text/plain; charset=utf-8")], "Echo endpoint received request")
-    }
-    
     private func notFoundEndpoint() -> (HTTPResponseStatus, [(String, String)], String) {
         return (.notFound, [("Content-Type", "text/plain; charset=utf-8")], "Not Found")
-    }
-    
-    private func transcribeEndpoint() -> (HTTPResponseStatus, [(String, String)], String) {
-        // Note: This is a placeholder. Actual implementation would need to handle file uploads
-        // and integrate with WhisperController
-        let response = [
-            "message": "Transcription endpoint ready",
-            "note": "Implement audio file handling in HTTPHandler"
-        ]
-        
-        let jsonData = try! JSONSerialization.data(withJSONObject: response)
-        let jsonString = String(data: jsonData, encoding: .utf8)!
-        
-        return (.ok, [("Content-Type", "application/json; charset=utf-8")], jsonString)
-    }
-    
-    private func transcriptionStatusEndpoint() -> (HTTPResponseStatus, [(String, String)], String) {
-        let statusResponse = [
-            "status": "ready",
-            "model": "whisper-base",
-            "supportedFormats": ["wav", "mp3", "m4a"],
-            "maxFileSizeMB": 25
-        ] as [String : Any]
-        
-        let jsonData = try! JSONSerialization.data(withJSONObject: statusResponse)
-        let jsonString = String(data: jsonData, encoding: .utf8)!
-        
-        return (.ok, [("Content-Type", "application/json; charset=utf-8")], jsonString)
     }
     
     private func modelsEndpoint() -> (HTTPResponseStatus, [(String, String)], String) {

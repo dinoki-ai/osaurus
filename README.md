@@ -1,82 +1,149 @@
 # Osaurus 🦕
 
-A lightweight macOS server application built with SwiftUI and SwiftNIO, featuring a menu bar interface for easy server management.
+Native, Apple Silicon–only local LLM server. Similar to Ollama, but built on Apple's MLX for maximum performance on M‑series chips. SwiftUI app + SwiftNIO server with OpenAI‑compatible endpoints.
 
-## Project Structure
+Created by Dinoki Labs ([dinoki.ai](https://dinoki.ai)), a fully native desktop AI assistant and companion.
+
+## Highlights
+
+- **Native MLX runtime**: Optimized for Apple Silicon using MLX/MLXLLM
+- **Apple Silicon only**: Designed and tested for M‑series Macs
+- **OpenAI API compatible**: `/v1/models` and `/v1/chat/completions` (stream and non‑stream)
+- **Fast token streaming**: Server‑Sent Events for low‑latency output
+- **Model manager UI**: Browse, download, and manage MLX models from `mlx-community`
+- **Self‑contained**: SwiftUI app with an embedded SwiftNIO HTTP server
+
+## Requirements
+
+- macOS 15.5+
+- Apple Silicon (M1 or newer)
+- Xcode 16.4+ (to build from source)
 
 ```
 osaurus/
-├── Core/                  # Core application files
-│   ├── AppDelegate.swift  # macOS app delegate
-│   └── osaurusApp.swift   # Main SwiftUI app entry point
-├── Controllers/           # View controllers and business logic
-│   ├── ServerController.swift  # Main server lifecycle controller
-│   └── ModelManager.swift      # MLX model download manager
-├── Models/               # Data models
-│   ├── ServerConfiguration.swift  # Server configuration settings
-│   ├── ServerHealth.swift        # Server health state enum
-│   ├── MLXModel.swift            # MLX model definitions
-│   └── OpenAIAPI.swift           # OpenAI API structures
-├── Networking/           # Network layer components
-│   ├── HTTPHandler.swift         # SwiftNIO HTTP request handler
-│   ├── Router.swift              # HTTP request router
-│   └── AsyncHTTPHandler.swift    # Async handler for streaming
-├── Services/             # Service layer
-│   └── MLXService.swift          # MLX model loading and inference
-├── Views/               # SwiftUI views
-│   ├── ContentView.swift         # Main window view
-│   ├── MenuBarControllerView.swift  # Menu bar UI
-│   └── ModelDownloadView.swift   # Model download interface
-└── osaurus.entitlements  # App entitlements
+├── Core/
+│   ├── AppDelegate.swift
+│   └── osaurusApp.swift
+├── Controllers/
+│   ├── ServerController.swift      # NIO server lifecycle
+│   └── ModelManager.swift          # Model discovery & downloads (Hugging Face)
+├── Models/
+│   ├── MLXModel.swift
+│   ├── OpenAIAPI.swift             # OpenAI‑compatible DTOs
+│   ├── ServerConfiguration.swift
+│   └── ServerHealth.swift
+├── Networking/
+│   ├── HTTPHandler.swift           # Request parsing & routing entry
+│   ├── Router.swift                # Routes → handlers
+│   └── AsyncHTTPHandler.swift      # SSE streaming for chat completions
+├── Services/
+│   ├── MLXService.swift            # MLX loading, session caching, generation
+│   └── SearchService.swift
+├── Theme/
+│   └── Theme.swift
+├── Views/
+│   ├── Components/SimpleComponents.swift
+│   ├── ContentView.swift           # Start/stop server, quick controls
+│   └── ModelDownloadView.swift     # Browse/download/manage models
+└── Assets.xcassets/
 ```
 
 ## Features
 
-- **Menu Bar Control**: Quick server management from the macOS menu bar
-- **SwiftNIO Based**: High-performance HTTP server using SwiftNIO
-- **Health Monitoring**: Built-in health check endpoint
-- **Clean Architecture**: Well-organized code with separation of concerns
-- **MLX Model Support**: Download and manage Apple MLX models for local AI inference
-- **OpenAI API Compatibility**: Compatible with OpenAI API clients and libraries
+- Native MLX text generation with model session caching
+- Model manager with curated suggestions (Llama, Qwen, Gemma, Mistral, etc.)
+- Download sizes estimated via Hugging Face metadata
+- Streaming and non‑streaming chat completions
+- Health endpoint and simple status UI
 
 ## API Endpoints
 
-- `GET /` - Root endpoint, returns server status
-- `GET /health` - Health check endpoint with JSON response
-- `POST /echo` - Echo endpoint for testing
-- `GET /models` - List available MLX models (OpenAI-compatible)
-- `POST /chat/completions` - Generate chat completions (OpenAI-compatible)
+- `GET /` → Plain text status
+- `GET /health` → JSON health info
+- `GET /models` and `GET /v1/models` → OpenAI‑compatible models list
+- `POST /chat/completions` and `POST /v1/chat/completions` → OpenAI‑compatible chat completions
 
-## Architecture
+## Getting Started
 
-### Core Components
+### Build and run
 
-1. **ServerController**: Manages the server lifecycle, including starting, stopping, and health monitoring
-2. **HTTPHandler**: Processes incoming HTTP requests using SwiftNIO
-3. **Router**: Routes requests to appropriate handlers based on method and path
-4. **ServerHealth**: Tracks server state (stopped, starting, running, stopping, error)
-5. **ServerConfiguration**: Holds server settings like port, host, and thread configuration
+1. Open `osaurus.xcodeproj` in Xcode 16.4+
+2. Build and run the `osaurus` target
+3. In the UI, pick a port (default `8080`) and press Start
+4. Open the model manager to download a model (e.g., “Llama 3.2 3B Instruct 4bit”)
 
-### Design Patterns
+Models are stored by default at `~/Documents/MLXModels`. Override with the environment variable `OSU_MODELS_DIR`.
 
-- **MVVM**: Views observe the ServerController for state changes
-- **Dependency Injection**: Server controller is passed through environment
-- **Protocol-Oriented**: Router and handlers follow SwiftNIO protocols
+### Use the API
 
-## Usage
+Base URL: `http://127.0.0.1:8080` (or your chosen port)
 
-The application provides both a main window interface and a menu bar controller for managing the server. Users can:
+List models:
 
-1. Start/stop the server
-2. Configure the port
-3. View server status
-4. Open the server URL in a browser
-5. Monitor server health
+```bash
+curl -s http://127.0.0.1:8080/v1/models | jq
+```
+
+Non‑streaming chat completion:
+
+```bash
+curl -s http://127.0.0.1:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+        "model": "llama-3.2-3b-instruct-4bit",
+        "messages": [{"role":"user","content":"Write a haiku about dinosaurs"}],
+        "max_tokens": 200
+      }'
+```
+
+Streaming chat completion (SSE):
+
+```bash
+curl -N http://127.0.0.1:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+        "model": "llama-3.2-3b-instruct-4bit",
+        "messages": [{"role":"user","content":"Summarize Jurassic Park in one paragraph"}],
+        "stream": true
+      }'
+```
+
+Tip: Model names are lower‑cased with hyphens (derived from the friendly name), for example: `Llama 3.2 3B Instruct 4bit` → `llama-3.2-3b-instruct-4bit`.
+
+### Use with OpenAI SDKs
+
+Point your client at Osaurus and use any placeholder API key.
+
+Python example:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:8080/v1", api_key="osaurus")
+
+resp = client.chat.completions.create(
+    model="llama-3.2-3b-instruct-4bit",
+    messages=[{"role": "user", "content": "Hello there!"}],
+)
+
+print(resp.choices[0].message.content)
+```
+
+## Models
+
+- Curated suggestions include Llama, Qwen, Gemma, Mistral, Phi, DeepSeek, etc. (4‑bit variants for speed)
+- Discovery pulls from Hugging Face `mlx-community` and computes size estimates
+- Required files are fetched automatically (tokenizer/config/weights)
+- Change the models directory with `OSU_MODELS_DIR`
+
+## Notes & Limitations
+
+- Apple Silicon only (requires MLX); Intel Macs are not supported
+- Localhost only, no authentication; put behind a proxy if exposing externally
+- `/transcribe` endpoints are placeholders pending Whisper integration
 
 ## Dependencies
 
-- SwiftNIO for networking
-- SwiftUI for the user interface
-- AppKit for macOS-specific features
-- MLX-Swift for machine learning model inference
-- MLXLLM for language model support
+- SwiftNIO (HTTP server)
+- SwiftUI/AppKit (UI)
+- MLX‑Swift, MLXLLM (runtime and chat session)

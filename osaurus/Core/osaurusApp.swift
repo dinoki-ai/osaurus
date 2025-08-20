@@ -23,13 +23,5 @@ struct osaurusApp: SwiftUI.App {
         }
         .windowStyle(.automatic)
         .windowToolbarStyle(.unified(showsTitle: true))
-
-        SwiftUI.MenuBarExtra("Osaurus", systemImage: "bird") {
-            MenuBarControllerView(server: serverController)
-                .onAppear {
-                    // Ensure app delegate has reference
-                    appDelegate.serverController = serverController
-                }
-        }
     }
 }

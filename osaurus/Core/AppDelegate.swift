@@ -119,10 +119,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
         popover.animates = true
 
+        let themeManager = ThemeManager.shared
         let contentView = ContentView(isPopover: true, onClose: { [weak self] in
             self?.popover?.performClose(nil)
         })
             .environmentObject(serverController)
+            .environment(\.theme, themeManager.currentTheme)
 
         popover.contentViewController = NSHostingController(rootView: contentView)
         self.popover = popover

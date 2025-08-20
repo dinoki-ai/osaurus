@@ -9,22 +9,17 @@ import SwiftUI
 
 struct ModelDownloadView: View {
     @StateObject private var modelManager = ModelManager.shared
+    @StateObject private var themeManager = ThemeManager.shared
+    @Environment(\.theme) private var theme
     @State private var showDeleteConfirmation = false
     @State private var modelToDelete: MLXModel?
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         ZStack {
-            // Background gradient
-            LinearGradient(
-                colors: [
-                    Color(NSColor.windowBackgroundColor),
-                    Color(NSColor.windowBackgroundColor).opacity(0.8)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            // Themed background
+            theme.primaryBackground
+                .ignoresSafeArea()
             
             VStack(spacing: 0) {
                 // Header
@@ -35,6 +30,7 @@ struct ModelDownloadView: View {
             }
         }
         .frame(minWidth: 700, minHeight: 600)
+        .environment(\.theme, themeManager.currentTheme)
         .alert("Delete Model", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Delete", role: .destructive) {
@@ -49,38 +45,30 @@ struct ModelDownloadView: View {
     
     private var headerView: some View {
         HStack {
-            // Logo with gradient background
+            // Logo with minimalistic outline
             ZStack {
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.green, Color.teal],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+                    .fill(theme.cardBackground)
+                    .overlay(
+                        Circle()
+                            .stroke(theme.accentColor, lineWidth: 2)
                     )
                     .frame(width: 50, height: 50)
                 
-                Image(systemName: "cube.box.fill")
+                Image(systemName: "cube.box")
                     .font(.system(size: 26))
-                    .foregroundColor(.white)
+                    .foregroundColor(theme.accentColor)
             }
-            .shadow(color: Color.green.opacity(0.3), radius: 8, x: 0, y: 4)
+            .shadow(color: theme.shadowColor.opacity(theme.shadowOpacity), radius: 6, x: 0, y: 2)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text("Model Manager")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.primary, Color.primary.opacity(0.8)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .foregroundColor(theme.primaryText)
                 
                 Text("Download and manage Large Language Models for MLX")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(theme.secondaryText)
             }
             
             Spacer()
@@ -88,29 +76,30 @@ struct ModelDownloadView: View {
             VStack(alignment: .trailing, spacing: 4) {
                 Text("Total Downloaded")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(theme.secondaryText)
                 Text(modelManager.totalDownloadedSizeString)
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.green, Color.teal],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .foregroundColor(theme.accentColor)
             }
             .padding(.trailing, 12)
             
             GradientButton(
                 title: "Done",
                 icon: "checkmark",
-                action: { dismiss() }
+                action: { dismiss() },
+                isPrimary: false
             )
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
         .background(
-            GlassBackground(cornerRadius: 0, opacity: 0.05)
+            theme.secondaryBackground
+                .overlay(
+                    Rectangle()
+                        .fill(theme.primaryBorder)
+                        .frame(height: 1),
+                    alignment: .bottom
+                )
         )
     }
     
@@ -140,6 +129,7 @@ struct ModelDownloadView: View {
 }
 
 struct ModelRowView: View {
+    @Environment(\.theme) private var theme
     let model: MLXModel
     let downloadState: DownloadState
     let onDownload: () -> Void
@@ -163,10 +153,11 @@ struct ModelRowView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(model.name)
                             .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(theme.primaryText)
                         
                         Text(model.description)
                             .font(.system(size: 13))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(theme.secondaryText)
                             .lineLimit(2)
                         
                         HStack(spacing: 12) {
@@ -176,14 +167,14 @@ struct ModelRowView: View {
                                 Text(model.sizeString)
                                     .font(.system(size: 11, weight: .medium))
                             }
-                            .foregroundColor(.secondary)
+                            .foregroundColor(theme.tertiaryText)
                             
                             if model.isDownloaded {
-                                StatusBadge(
-                                    status: "Downloaded",
-                                    color: .green,
-                                    isAnimating: false
-                                )
+                                                StatusBadge(
+                    status: "Downloaded",
+                    color: theme.successColor,
+                    isAnimating: false
+                )
                             }
                         }
                     }
@@ -203,7 +194,7 @@ struct ModelRowView: View {
                         
                         Text("\(Int(progress * 100))% downloaded")
                             .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(theme.secondaryText)
                     }
                     .padding(.bottom, 16)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -228,54 +219,28 @@ struct ModelRowView: View {
             )
             
         case .downloading:
-            Button(action: onCancel) {
-                HStack(spacing: 6) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
-                    Text("Cancel")
-                        .font(.system(size: 14, weight: .medium))
-                }
-                .foregroundColor(.orange)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.orange.opacity(0.15))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                        )
-                )
-            }
-            .buttonStyle(PlainButtonStyle())
+            GradientButton(
+                title: "Cancel",
+                icon: "xmark.circle",
+                action: onCancel,
+                isDestructive: true,
+                isPrimary: false
+            )
             
         case .completed:
-            Button(action: onDelete) {
-                HStack(spacing: 6) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 14))
-                    Text("Delete")
-                        .font(.system(size: 14, weight: .medium))
-                }
-                .foregroundColor(.red)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.red.opacity(0.15))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.red.opacity(0.3), lineWidth: 1)
-                        )
-                )
-            }
-            .buttonStyle(PlainButtonStyle())
+            GradientButton(
+                title: "Delete",
+                icon: "trash",
+                action: onDelete,
+                isDestructive: true,
+                isPrimary: false
+            )
             
         case .failed(let error):
             VStack(alignment: .trailing, spacing: 8) {
                 StatusBadge(
                     status: "Failed",
-                    color: .red,
+                    color: theme.errorColor,
                     isAnimating: false
                 )
                 

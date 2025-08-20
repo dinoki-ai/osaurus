@@ -10,6 +10,8 @@ import AppKit
 
 struct ContentView: View {
     @EnvironmentObject var server: ServerController
+    @StateObject private var themeManager = ThemeManager.shared
+    @Environment(\.theme) private var theme
     // Popover customization
     var isPopover: Bool = false
     var onClose: (() -> Void)? = nil
@@ -23,16 +25,9 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            // Background gradient
-            LinearGradient(
-                colors: [
-                    Color(NSColor.windowBackgroundColor),
-                    Color(NSColor.windowBackgroundColor).opacity(0.8)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            // Themed background
+            theme.primaryBackground
+                .ignoresSafeArea()
             
             VStack(spacing: 16) {
                 // Top row: Logo and status
@@ -48,12 +43,13 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Osaurus")
                             .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundColor(theme.primaryText)
                         
                         if server.isRunning {
                             HStack(spacing: 4) {
                                 Text("http://127.0.0.1:\(String(server.port))")
                                     .font(.system(size: 11, weight: .regular, design: .monospaced))
-                                    .foregroundColor(.secondary.opacity(0.8))
+                                    .foregroundColor(theme.secondaryText)
                                 
                                 Button(action: {
                                     let url = "http://127.0.0.1:\(String(server.port))"
@@ -62,7 +58,7 @@ struct ContentView: View {
                                 }) {
                                     Image(systemName: "doc.on.doc")
                                         .font(.system(size: 10))
-                                        .foregroundColor(.secondary.opacity(0.6))
+                                        .foregroundColor(theme.tertiaryText)
                                 }
                                 .buttonStyle(PlainButtonStyle())
                                 .help("Copy URL")
@@ -71,7 +67,7 @@ struct ContentView: View {
                         } else {
                             Text(statusText)
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(theme.secondaryText)
                         }
                     }
                     
@@ -94,7 +90,7 @@ struct ContentView: View {
                         HStack(spacing: 6) {
                             Text("Port:")
                                 .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(theme.secondaryText)
                             
                             TextField("8080", text: $portString)
                                 .textFieldStyle(.plain)
@@ -104,12 +100,13 @@ struct ContentView: View {
                                 .padding(.vertical, 4)
                                 .background(
                                     RoundedRectangle(cornerRadius: 6)
-                                        .fill(Color(NSColor.controlBackgroundColor).opacity(0.5))
+                                        .fill(theme.inputBackground)
                                         .overlay(
                                             RoundedRectangle(cornerRadius: 6)
-                                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                                .stroke(theme.inputBorder, lineWidth: 1)
                                         )
                                 )
+                                .foregroundColor(theme.primaryText)
                         }
                         .transition(.move(edge: .leading).combined(with: .opacity))
                     }
@@ -126,14 +123,14 @@ struct ContentView: View {
                             }) {
                                 Image(systemName: "gearshape")
                                     .font(.system(size: 14))
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(theme.primaryText)
                                     .frame(width: 28, height: 28)
                                     .background(
                                         Circle()
-                                            .fill(Color(NSColor.controlBackgroundColor))
+                                            .fill(theme.buttonBackground)
                                             .overlay(
                                                 Circle()
-                                                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                                    .stroke(theme.buttonBorder, lineWidth: 1)
                                             )
                                     )
                             }
@@ -145,17 +142,18 @@ struct ContentView: View {
                             .frame(height: 20)
                             .padding(.horizontal, 2)
                         
+                        
                         Button(action: { showModelManager = true }) {
                             Image(systemName: "cube.box")
                                 .font(.system(size: 14))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(theme.primaryText)
                                 .frame(width: 28, height: 28)
                                 .background(
                                     Circle()
-                                        .fill(Color(NSColor.controlBackgroundColor))
+                                        .fill(theme.buttonBackground)
                                         .overlay(
                                             Circle()
-                                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                                .stroke(theme.buttonBorder, lineWidth: 1)
                                         )
                                 )
                         }
@@ -170,6 +168,7 @@ struct ContentView: View {
             width: isPopover ? 380 : 420,
             height: isPopover ? 140 : 160
         )
+        .environment(\.theme, themeManager.currentTheme)
         .onAppear {
             portString = String(server.port)
             startHealthCheck()

@@ -19,7 +19,7 @@ struct ContentView: View {
     @State private var lastHealthCheck: Date?
     @State private var selectedModelId: String?
     @State private var showModelManager = false
-    @State private var showConfigPopover = false
+    @State private var isEditingPort = false
     
     var body: some View {
         ZStack {
@@ -34,35 +34,141 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
             
-            VStack(spacing: isPopover ? 12 : 16) {
-                // Header
-                headerView
-                
-                // Primary control button reflecting state
-                HStack(spacing: 12) {
+            VStack(spacing: 16) {
+                // Top row: Logo and status
+                HStack(spacing: 8) {
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .interpolation(.high)
+                        .antialiased(true)
+                        .scaledToFit()
+                        .frame(width: 40, height: 40)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Osaurus")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                        
+                        if server.isRunning {
+                            HStack(spacing: 4) {
+                                Text("http://127.0.0.1:\(String(server.port))")
+                                    .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                    .foregroundColor(.secondary.opacity(0.8))
+                                
+                                Button(action: {
+                                    let url = "http://127.0.0.1:\(String(server.port))"
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(url, forType: .string)
+                                }) {
+                                    Image(systemName: "doc.on.doc")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary.opacity(0.6))
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .help("Copy URL")
+                            }
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        } else {
+                            Text(statusText)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    // Primary control button in top-right
                     SimpleToggleButton(
                         isOn: server.serverHealth == .running,
                         title: primaryButtonTitle,
                         icon: primaryButtonIcon,
                         action: toggleServer
                     )
-                    .frame(maxWidth: .infinity)
                     .disabled(isBusy)
                 }
-                .padding(.horizontal, 20)
                 
-                // Server info when running
-                if server.isRunning {
-                    serverInfoCard
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                // Bottom row: Actions
+                HStack(spacing: 12) {
+                    // Port configuration (inline)
+                    if !server.isRunning && (isEditingPort || !isPopover) {
+                        HStack(spacing: 6) {
+                            Text("Port:")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.secondary)
+                            
+                            TextField("8080", text: $portString)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                                .frame(width: 50)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(Color(NSColor.controlBackgroundColor).opacity(0.5))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                        )
+                                )
+                        }
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                    }
+                    
+                    Spacer()
+                    
+                    // Action buttons
+                    HStack(spacing: 8) {
+                        if isPopover && !server.isRunning {
+                            Button(action: { 
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    isEditingPort.toggle()
+                                }
+                            }) {
+                                Image(systemName: "gearshape")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 28, height: 28)
+                                    .background(
+                                        Circle()
+                                            .fill(Color(NSColor.controlBackgroundColor))
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                            )
+                                    )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .help("Configure port")
+                        }
+                        
+                        Divider()
+                            .frame(height: 20)
+                            .padding(.horizontal, 2)
+                        
+                        Button(action: { showModelManager = true }) {
+                            Image(systemName: "cube.box")
+                                .font(.system(size: 14))
+                                .foregroundColor(.secondary)
+                                .frame(width: 28, height: 28)
+                                .background(
+                                    Circle()
+                                        .fill(Color(NSColor.controlBackgroundColor))
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                        )
+                                )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Manage models")
+                    }
                 }
-                
-                Spacer()
             }
+            .padding(20)
         }
         .frame(
             width: isPopover ? 380 : 420,
-            height: isPopover ? (server.isRunning ? 320 : 220) : (server.isRunning ? 380 : 200)
+            height: isPopover ? 140 : 160
         )
         .onAppear {
             portString = String(server.port)
@@ -76,158 +182,8 @@ struct ContentView: View {
         .sheet(isPresented: $showModelManager) {
             ModelDownloadView()
         }
-        .popover(isPresented: $showConfigPopover) {
-            configurationPopover
-        }
     }
-    
-    private var headerView: some View {
-        HStack {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .interpolation(.high)
-                .antialiased(true)
-                .scaledToFit()
-                .frame(width: 40, height: 40)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Osaurus")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                
-                Text(statusText)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            // Configuration button
-            Button(action: { showConfigPopover = true }) {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 16))
-                    .foregroundColor(.secondary)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        Circle()
-                            .fill(Color(NSColor.controlBackgroundColor))
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                            )
-                    )
-            }
-            .buttonStyle(PlainButtonStyle())
-            .help("Configuration")
 
-            if isPopover {
-                Button(action: { onClose?() }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 28, height: 28)
-                        .background(
-                            Circle()
-                                .fill(Color(NSColor.controlBackgroundColor))
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                                )
-                        )
-                }
-                .buttonStyle(PlainButtonStyle())
-                .help("Close")
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, isPopover ? 12 : 16)
-        .background(
-            GlassBackground(cornerRadius: 0, opacity: 0.05)
-        )
-    }
-    
-    private var serverInfoCard: some View {
-        SimpleCard(padding: 16) {
-            VStack(spacing: 16) {
-                Text("Your MLX server is ready!")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.secondary)
-                
-                VStack(spacing: 12) {
-                    CopyableURLField(
-                        label: "Server URL",
-                        url: "http://127.0.0.1:\(server.port)"
-                    )
-                }
-            }
-        }
-        .padding(.horizontal, 20)
-    }
-    
-
-    private var configurationPopover: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Configuration")
-                .font(.system(size: 16, weight: .semibold))
-                .padding(.bottom, 4)
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Port")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.secondary)
-                
-                HStack(spacing: 8) {
-                    TextField("8080", text: $portString)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
-                        .frame(width: 60)
-                        .disabled(server.isRunning)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color(NSColor.controlBackgroundColor).opacity(0.5))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                                )
-                        )
-                    
-                    Text("(1-65535)")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                }
-                
-                if server.isRunning {
-                    Text("Stop the server to change port")
-                        .font(.system(size: 11))
-                        .foregroundColor(.orange)
-                }
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Models")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.secondary)
-                Button(action: {
-                    showConfigPopover = false
-                    showModelManager = true
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "cube.box")
-                            .font(.system(size: 14))
-                        Text("Manage Models…")
-                            .font(.system(size: 14, weight: .medium))
-                    }
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-        }
-        .padding(20)
-        .frame(width: 250)
-    }
     
     private var statusText: String {
         switch server.serverHealth {
@@ -236,7 +192,7 @@ struct ContentView: View {
         case .starting:
             return "Starting..."
         case .running:
-            return "Running on port \(server.port)"
+            return "Running on port \(String(server.port))"
         case .stopping:
             return "Stopping..."
         case .error(let message):

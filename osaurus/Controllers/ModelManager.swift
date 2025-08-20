@@ -28,13 +28,20 @@ final class ModelManager: NSObject, ObservableObject {
     @Published var downloadStates: [String: DownloadState] = [:]
     
     // MARK: - Properties
-    static let modelsDirectory: URL = {
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, 
+    nonisolated(unsafe) static var modelsDirectory: URL = {
+        // Allow override (useful for tests) via environment variable
+        if let overridePath = ProcessInfo.processInfo.environment["OSU_MODELS_DIR"], !overridePath.isEmpty {
+            let overrideURL = URL(fileURLWithPath: overridePath, isDirectory: true)
+            try? FileManager.default.createDirectory(at: overrideURL, withIntermediateDirectories: true)
+            return overrideURL
+        }
+
+        let documentsPath = FileManager.default.urls(for: .documentDirectory,
                                                      in: .userDomainMask).first!
         let modelsPath = documentsPath.appendingPathComponent("MLXModels")
         
         // Create directory if it doesn't exist
-        try? FileManager.default.createDirectory(at: modelsPath, 
+        try? FileManager.default.createDirectory(at: modelsPath,
                                                  withIntermediateDirectories: true)
         return modelsPath
     }()
@@ -217,11 +224,21 @@ final class ModelManager: NSObject, ObservableObject {
     
     /// Delete a downloaded model
     func deleteModel(_ model: MLXModel) {
-        do {
-            try FileManager.default.removeItem(at: model.localDirectory)
-            downloadStates[model.id] = .notStarted
-        } catch {
-            print("Failed to delete model: \(error)")
+        // Cancel any active download task and reset state first
+        activeDownloadTasks[model.id]?.cancel()
+        activeDownloadTasks[model.id] = nil
+        downloadStates[model.id] = .notStarted
+
+        // Remove local files if present
+        let fm = FileManager.default
+        let path = model.localDirectory.path
+        if fm.fileExists(atPath: path) {
+            do {
+                try fm.removeItem(atPath: path)
+            } catch {
+                // Log but keep state reset
+                print("Failed to delete model: \(error)")
+            }
         }
     }
     

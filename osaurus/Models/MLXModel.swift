@@ -15,6 +15,28 @@ struct MLXModel: Identifiable, Codable {
     let size: Int64 // Size in bytes
     let downloadURL: String
     let requiredFiles: [String] // Files needed for the model
+
+    // Capture the models root directory at initialization time to avoid
+    // relying on a mutable global during tests or concurrent execution.
+    private let rootDirectory: URL
+
+    init(
+        id: String,
+        name: String,
+        description: String,
+        size: Int64,
+        downloadURL: String,
+        requiredFiles: [String],
+        rootDirectory: URL = ModelManager.modelsDirectory
+    ) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.size = size
+        self.downloadURL = downloadURL
+        self.requiredFiles = requiredFiles
+        self.rootDirectory = rootDirectory
+    }
     
     /// Human-readable size string
     var sizeString: String {
@@ -23,13 +45,13 @@ struct MLXModel: Identifiable, Codable {
     
     /// Local directory where this model should be stored
     var localDirectory: URL {
-        ModelManager.modelsDirectory.appendingPathComponent(id)
+        rootDirectory.appendingPathComponent(id)
     }
     
     /// Check if model is downloaded
     var isDownloaded: Bool {
         let fileManager = FileManager.default
-        
+
         // Required JSON metadata files commonly used by transformers
         let requiredJsonFiles = [
             "config.json",
@@ -37,17 +59,17 @@ struct MLXModel: Identifiable, Codable {
             "tokenizer_config.json",
             "special_tokens_map.json"
         ]
-        
+
         // All JSON files must exist
         let jsonOk = requiredJsonFiles.allSatisfy { fileName in
-            let filePath = localDirectory.appendingPathComponent(fileName)
-            return fileManager.fileExists(atPath: filePath.path)
+            let filePath = localDirectory.appendingPathComponent(fileName).path
+            return fileManager.fileExists(atPath: filePath)
         }
         guard jsonOk else { return false }
-        
+
         // At least one weights file must exist
-        if let items = try? fileManager.contentsOfDirectory(atPath: localDirectory.path) {
-            let hasWeights = items.contains { $0.hasSuffix(".safetensors") }
+        if let items = try? fileManager.contentsOfDirectory(at: localDirectory, includingPropertiesForKeys: nil) {
+            let hasWeights = items.contains { $0.pathExtension == "safetensors" }
             return hasWeights
         }
         return false

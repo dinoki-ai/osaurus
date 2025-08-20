@@ -366,4 +366,66 @@ struct IconBadge: View {
     }
 }
 
+// MARK: - Custom Tab Picker
+struct ThemedTabPicker<SelectionValue: Hashable>: View {
+    @Environment(\.theme) private var theme
+    @Binding var selection: SelectionValue
+    let tabs: [(SelectionValue, String)]
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(tabs, id: \.0) { value, title in
+                TabButton(
+                    title: title,
+                    isSelected: selection == value,
+                    action: { selection = value }
+                )
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(theme.cardBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(theme.cardBorder, lineWidth: 1)
+                )
+        )
+    }
+}
+
+private struct TabButton: View {
+    @Environment(\.theme) private var theme
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var isHovering = false
+    
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                .foregroundColor(isSelected ? theme.primaryText : theme.secondaryText)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isSelected ? theme.accentColor.opacity(0.1) : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(
+                            isSelected ? theme.accentColor : Color.clear,
+                            lineWidth: 1.5
+                        )
+                )
+                .animation(.easeInOut(duration: 0.2), value: isSelected)
+                .scaleEffect(isHovering && !isSelected ? 1.05 : 1.0)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .onHover { hovering in
+            isHovering = hovering
+        }
+    }
+}
+
 // MARK: - Theme Toggle (removed)

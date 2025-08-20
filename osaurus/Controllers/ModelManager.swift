@@ -28,6 +28,11 @@ final class ModelManager: NSObject, ObservableObject {
     @Published var downloadStates: [String: DownloadState] = [:]
     @Published var isLoadingModels: Bool = false
     
+    /// Curated list of suggested models surfaced in the UI
+    var suggestedModels: [MLXModel] {
+        return Self.curatedSuggestedModels
+    }
+    
     // MARK: - Properties
     nonisolated(unsafe) static var modelsDirectory: URL = {
         // Allow override (useful for tests) via environment variable
@@ -326,6 +331,65 @@ final class ModelManager: NSObject, ObservableObject {
 // MARK: - Dynamic model discovery (Hugging Face)
 
 private extension ModelManager {
+    /// Fully curated models with descriptions we control. Order matters.
+    static let curatedSuggestedModels: [MLXModel] = [
+        MLXModel(
+            id: "mlx-community/Llama-3.2-1B-Instruct-4bit",
+            name: friendlyName(from: "mlx-community/Llama-3.2-1B-Instruct-4bit"),
+            description: "Tiny and fast. Great for quick tests, code helpers, and lightweight tasks.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/Llama-3.2-1B-Instruct-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
+        MLXModel(
+            id: "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            name: friendlyName(from: "mlx-community/Qwen2.5-1.5B-Instruct-4bit"),
+            description: "Small but capable. Strong instruction following with tiny memory footprint.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
+        MLXModel(
+            id: "mlx-community/Gemma-2-2B-IT-4bit",
+            name: friendlyName(from: "mlx-community/Gemma-2-2B-IT-4bit"),
+            description: "Balanced quality and speed. A solid general-purpose assistant at 2B params.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/Gemma-2-2B-IT-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
+        MLXModel(
+            id: "mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit",
+            name: friendlyName(from: "mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit"),
+            description: "Reasoning-focused distilled model. Good for structured steps and chain-of-thought style prompts.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
+        MLXModel(
+            id: "mlx-community/Llama-3.1-8B-Instruct-4bit",
+            name: friendlyName(from: "mlx-community/Llama-3.1-8B-Instruct-4bit"),
+            description: "Popular 8B performer. Good quality for on-device use if you have the RAM.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/Llama-3.1-8B-Instruct-4bit",
+            requiredFiles: curatedRequiredFiles
+        ),
+        MLXModel(
+            id: "mlx-community/Qwen2.5-7B-Instruct-4bit",
+            name: friendlyName(from: "mlx-community/Qwen2.5-7B-Instruct-4bit"),
+            description: "High-quality 7B assistant. Great all-rounder with strong instruction tuning.",
+            size: 0,
+            downloadURL: "https://huggingface.co/mlx-community/Qwen2.5-7B-Instruct-4bit",
+            requiredFiles: curatedRequiredFiles
+        )
+    ]
+
+    static let curatedRequiredFiles: [String] = [
+        "model.safetensors",
+        "config.json",
+        "tokenizer_config.json",
+        "tokenizer.json",
+        "special_tokens_map.json"
+    ]
     /// Minimal HF API response structures we care about
     struct HFRepo: Decodable {
         let id: String

@@ -14,6 +14,7 @@ struct ModelDownloadView: View {
     @State private var showDeleteConfirmation = false
     @State private var modelToDelete: MLXModel?
     @State private var searchText: String = ""
+    @State private var selectedTab: ModelListTab = .suggested
     
     var body: some View {
         ZStack {
@@ -97,6 +98,26 @@ struct ModelDownloadView: View {
     
     private var modelListView: some View {
         VStack(spacing: 0) {
+            // Tabs
+            HStack {
+                Spacer()
+                ThemedTabPicker(
+                    selection: $selectedTab,
+                    tabs: ModelListTab.allCases.map { ($0, $0.title) }
+                )
+                .frame(maxWidth: 400)
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(theme.secondaryBackground)
+            .overlay(
+                Rectangle()
+                    .fill(theme.primaryBorder)
+                    .frame(height: 1),
+                alignment: .bottom
+            )
+
             // Search row above results
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
@@ -129,7 +150,7 @@ struct ModelDownloadView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 16) {
-                        ForEach(filteredModels) { model in
+                        ForEach(displayedModels) { model in
                             ModelRowView(
                                 model: model,
                                 downloadState: modelManager.downloadStates[model.id] ?? .notStarted,
@@ -157,6 +178,26 @@ struct ModelDownloadView: View {
 
     private var filteredModels: [MLXModel] {
         SearchService.filterModels(modelManager.availableModels, with: searchText)
+    }
+
+    private var filteredSuggestedModels: [MLXModel] {
+        SearchService.filterModels(modelManager.suggestedModels, with: searchText)
+    }
+
+    private var displayedModels: [MLXModel] {
+        selectedTab == .suggested ? filteredSuggestedModels : filteredModels
+    }
+}
+
+enum ModelListTab: CaseIterable {
+    case suggested
+    case all
+
+    var title: String {
+        switch self {
+        case .suggested: return "Suggested Models"
+        case .all: return "All Models"
+        }
     }
 }
 
@@ -186,22 +227,29 @@ struct ModelRowView: View {
                         Text(model.name)
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(theme.primaryText)
+                        
+                        // Description if available
+                        if !model.description.isEmpty {
+                            Text(model.description)
+                                .font(.system(size: 13))
+                                .foregroundColor(theme.secondaryText)
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
 
-                        // Repository URL / README link (raw URL), left-aligned with ellipsis
+                        // Repository URL as small link
                         if let url = URL(string: model.downloadURL) {
-                            Link(model.downloadURL, destination: url)
-                                .font(.system(size: 11))
-                                .foregroundColor(theme.secondaryText)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            Text(model.downloadURL)
-                                .font(.system(size: 11))
-                                .foregroundColor(theme.secondaryText)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            HStack(spacing: 4) {
+                                Image(systemName: "link")
+                                    .font(.system(size: 10))
+                                Link(repositoryName(from: model.downloadURL), destination: url)
+                                    .font(.system(size: 11))
+                                    .underline(false)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            .foregroundColor(theme.tertiaryText)
+                            .opacity(0.8)
                         }
                         
                         HStack(spacing: 12) {
@@ -306,6 +354,21 @@ struct ModelRowView: View {
             }
         }
     }
+}
+
+// Helper function to extract repository name from URL
+private func repositoryName(from urlString: String) -> String {
+    // Extract the repository part from Hugging Face URL
+    // Example: https://huggingface.co/mlx-community/Llama-3.2-1B-Instruct-4bit -> mlx-community/Llama-3.2-1B-Instruct-4bit
+    if let url = URL(string: urlString),
+       url.host == "huggingface.co" {
+        let pathComponents = url.pathComponents.filter { $0 != "/" }
+        if pathComponents.count >= 2 {
+            return "\(pathComponents[0])/\(pathComponents[1])"
+        }
+    }
+    // Fallback to showing the full URL
+    return urlString
 }
 
 #Preview {

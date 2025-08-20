@@ -47,6 +47,7 @@ final class ModelManager: NSObject, ObservableObject {
     }()
     
     private var activeDownloadTasks: [String: Task<Void, Never>] = [:] // modelId -> Task
+    private var downloadTokens: [String: UUID] = [:] // modelId -> token to gate progress/state updates
     private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Initialization
@@ -140,10 +141,19 @@ final class ModelManager: NSObject, ObservableObject {
     
     /// Download a model using Hugging Face Hub snapshot API
     func downloadModel(_ model: MLXModel) {
-        guard downloadStates[model.id] == .notStarted || downloadStates[model.id] == nil else { return }
+        let state = downloadStates[model.id] ?? .notStarted
+        switch state {
+        case .downloading, .completed:
+            return
+        default:
+            break
+        }
         
         // Reset any previous task
         activeDownloadTasks[model.id]?.cancel()
+        // Create a new token for this download session
+        let token = UUID()
+        downloadTokens[model.id] = token
         
         downloadStates[model.id] = .downloading(progress: 0.0)
         
@@ -181,6 +191,8 @@ final class ModelManager: NSObject, ObservableObject {
                     progressHandler: { progress in
                         Task { @MainActor [weak self] in
                             guard let self = self else { return }
+                            // Ignore progress updates from stale/canceled tasks
+                            guard self.downloadTokens[model.id] == token else { return }
                             // Clamp to [0, 1]
                             let fraction = max(0.0, min(1.0, progress.fractionCompleted))
                             self.downloadStates[model.id] = .downloading(progress: fraction)
@@ -191,18 +203,38 @@ final class ModelManager: NSObject, ObservableObject {
                 // Copy snapshot contents into our managed models directory
                 try self.copyContents(of: snapshotDirectory, to: model.localDirectory)
                 
+                // Attempt to remove the Hub snapshot cache directory to free disk space
+                // This directory is a cached snapshot; we've already copied the contents
+                // into our app-managed models directory above, so it's safe to delete.
+                do {
+                    try FileManager.default.removeItem(at: snapshotDirectory)
+                } catch {
+                    // Non-fatal cleanup failure
+                    print("Warning: failed to remove Hub snapshot cache at \(snapshotDirectory.path): \(error)")
+                }
+                
                 // Verify
                 let completed = model.isDownloaded
                 await MainActor.run {
-                    self.downloadStates[model.id] = completed ? .completed : .failed(error: "Downloaded snapshot incomplete")
+                    // Only update state if this session is still current
+                    if self.downloadTokens[model.id] == token {
+                        self.downloadStates[model.id] = completed ? .completed : .failed(error: "Downloaded snapshot incomplete")
+                        self.downloadTokens[model.id] = nil
+                    }
                 }
             } catch is CancellationError {
                 await MainActor.run {
-                    self.downloadStates[model.id] = .notStarted
+                    if self.downloadTokens[model.id] == token {
+                        self.downloadStates[model.id] = .notStarted
+                        self.downloadTokens[model.id] = nil
+                    }
                 }
             } catch {
                 await MainActor.run {
-                    self.downloadStates[model.id] = .failed(error: error.localizedDescription)
+                    if self.downloadTokens[model.id] == token {
+                        self.downloadStates[model.id] = .failed(error: error.localizedDescription)
+                        self.downloadTokens[model.id] = nil
+                    }
                 }
             }
             
@@ -219,6 +251,7 @@ final class ModelManager: NSObject, ObservableObject {
         // Cancel active snapshot task if any
         activeDownloadTasks[modelId]?.cancel()
         activeDownloadTasks[modelId] = nil
+        downloadTokens[modelId] = nil
         downloadStates[modelId] = .notStarted
     }
     
@@ -227,6 +260,7 @@ final class ModelManager: NSObject, ObservableObject {
         // Cancel any active download task and reset state first
         activeDownloadTasks[model.id]?.cancel()
         activeDownloadTasks[model.id] = nil
+        downloadTokens[model.id] = nil
         downloadStates[model.id] = .notStarted
 
         // Remove local files if present

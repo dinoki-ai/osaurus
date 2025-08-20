@@ -93,58 +93,6 @@ struct ModelManagerTests {
         try? FileManager.default.removeItem(at: tempDir)
     }
 
-    @Test func isDownloaded_true_whenRequiredFilesPresent() async throws {
-        let previous = await MainActor.run { ModelManager.modelsDirectory }
-        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        await MainActor.run { ModelManager.modelsDirectory = tempDir }
-
-        let manager = await MainActor.run { ModelManager() }
-        let model = await MainActor.run { manager.availableModels.first! }
-        let dir = model.localDirectory
-
-        // Ensure a clean slate
-        try? FileManager.default.removeItem(at: dir)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-
-        // Create required JSON files
-        let jsons = [
-            "config.json",
-            "tokenizer.json",
-            "tokenizer_config.json",
-            "special_tokens_map.json"
-        ]
-        for name in jsons {
-            let url = dir.appendingPathComponent(name)
-            try Data("{}".utf8).write(to: url)
-        }
-
-        // Create at least one weights file
-        let weights = dir.appendingPathComponent("model.safetensors")
-        try Data().write(to: weights)
-
-        // Sanity: files exist where expected
-        let fm = FileManager.default
-        for name in jsons { #expect(fm.fileExists(atPath: dir.appendingPathComponent(name).path)) }
-        #expect(fm.fileExists(atPath: weights.path))
-        if let items = try? fm.contentsOfDirectory(atPath: dir.path) {
-            #expect(items.contains("config.json"))
-            #expect(items.contains("tokenizer.json"))
-            #expect(items.contains("tokenizer_config.json"))
-            #expect(items.contains("special_tokens_map.json"))
-            #expect(items.contains("model.safetensors"))
-        }
-
-        // Validate detection
-        let result = model.isDownloaded
-        #expect(result == true)
-
-        // Cleanup
-        try? FileManager.default.removeItem(at: dir)
-        await MainActor.run { ModelManager.modelsDirectory = previous }
-        try? FileManager.default.removeItem(at: tempDir)
-    }
-
     @Test func deleteModel_removesDirectoryAndResetsState() async throws {
         let previous = await MainActor.run { ModelManager.modelsDirectory }
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

@@ -13,7 +13,7 @@ struct ModelDownloadView: View {
     @Environment(\.theme) private var theme
     @State private var showDeleteConfirmation = false
     @State private var modelToDelete: MLXModel?
-    @Environment(\.dismiss) private var dismiss
+    @State private var searchText: String = ""
     
     var body: some View {
         ZStack {
@@ -62,7 +62,7 @@ struct ModelDownloadView: View {
             .shadow(color: theme.shadowColor.opacity(theme.shadowOpacity), radius: 6, x: 0, y: 2)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text("Model Manager")
+                Text("Manage Models")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundColor(theme.primaryText)
                 
@@ -81,14 +81,6 @@ struct ModelDownloadView: View {
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(theme.accentColor)
             }
-            .padding(.trailing, 12)
-            
-            GradientButton(
-                title: "Done",
-                icon: "checkmark",
-                action: { dismiss() },
-                isPrimary: false
-            )
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 20)
@@ -104,27 +96,96 @@ struct ModelDownloadView: View {
     }
     
     private var modelListView: some View {
-        ScrollView {
-            LazyVStack(spacing: 16) {
-                ForEach(modelManager.availableModels) { model in
-                    ModelRowView(
-                        model: model,
-                        downloadState: modelManager.downloadStates[model.id] ?? .notStarted,
-                        onDownload: { modelManager.downloadModel(model) },
-                        onCancel: { modelManager.cancelDownload(model.id) },
-                        onDelete: {
-                            modelToDelete = model
-                            showDeleteConfirmation = true
+        VStack(spacing: 0) {
+            // Search row above results
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(theme.tertiaryText)
+                TextField("Search models", text: $searchText)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .foregroundColor(theme.primaryText)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 10)
+            .background(theme.secondaryBackground)
+            .overlay(
+                Rectangle()
+                    .fill(theme.primaryBorder)
+                    .frame(height: 1),
+                alignment: .bottom
+            )
+
+            if modelManager.isLoadingModels {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                    Text("Loading models…")
+                        .foregroundColor(theme.secondaryText)
+                        .font(.system(size: 13))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(40)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 16) {
+                        ForEach(filteredModels) { model in
+                            ModelRowView(
+                                model: model,
+                                downloadState: modelManager.downloadStates[model.id] ?? .notStarted,
+                                onDownload: { modelManager.downloadModel(model) },
+                                onCancel: { modelManager.cancelDownload(model.id) },
+                                onDelete: {
+                                    modelToDelete = model
+                                    showDeleteConfirmation = true
+                                }
+                            )
+                            .onAppear {
+                                modelManager.prefetchModelDetailsIfNeeded(for: model)
+                            }
+                            .transition(.asymmetric(
+                                insertion: .scale.combined(with: .opacity),
+                                removal: .scale.combined(with: .opacity)
+                            ))
                         }
-                    )
-                    .transition(.asymmetric(
-                        insertion: .scale.combined(with: .opacity),
-                        removal: .scale.combined(with: .opacity)
-                    ))
+                    }
+                    .padding(24)
                 }
             }
-            .padding(24)
         }
+    }
+
+    private var filteredModels: [MLXModel] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return modelManager.availableModels }
+        return modelManager.availableModels.filter { model in
+            // Fuzzy search implementation
+            let searchTargets = [
+                model.name.lowercased(),
+                model.id.lowercased(),
+                model.description.lowercased(),
+                model.downloadURL.lowercased()
+            ]
+            
+            return searchTargets.contains { target in
+                fuzzyMatch(query: query, in: target)
+            }
+        }
+    }
+    
+    // Fuzzy matching function - returns true if all characters in query
+    // appear in the same order in the target string
+    private func fuzzyMatch(query: String, in target: String) -> Bool {
+        var queryIndex = query.startIndex
+        var targetIndex = target.startIndex
+        
+        while queryIndex < query.endIndex && targetIndex < target.endIndex {
+            if query[queryIndex] == target[targetIndex] {
+                queryIndex = query.index(after: queryIndex)
+            }
+            targetIndex = target.index(after: targetIndex)
+        }
+        
+        return queryIndex == query.endIndex
     }
 }
 
@@ -154,18 +215,35 @@ struct ModelRowView: View {
                         Text(model.name)
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(theme.primaryText)
-                        
-                        Text(model.description)
-                            .font(.system(size: 13))
-                            .foregroundColor(theme.secondaryText)
-                            .lineLimit(2)
+
+                        // Repository URL / README link (raw URL), left-aligned with ellipsis
+                        if let url = URL(string: model.downloadURL) {
+                            Link(model.downloadURL, destination: url)
+                                .font(.system(size: 11))
+                                .foregroundColor(theme.secondaryText)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            Text(model.downloadURL)
+                                .font(.system(size: 11))
+                                .foregroundColor(theme.secondaryText)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                         
                         HStack(spacing: 12) {
                             HStack(spacing: 4) {
                                 Image(systemName: "internaldrive")
                                     .font(.system(size: 11))
-                                Text(model.sizeString)
-                                    .font(.system(size: 11, weight: .medium))
+                                if model.size > 0 {
+                                    Text(model.sizeString)
+                                        .font(.system(size: 11, weight: .medium))
+                                } else {
+                                    Text("estimating…")
+                                        .font(.system(size: 11, weight: .medium))
+                                }
                             }
                             .foregroundColor(theme.tertiaryText)
                             

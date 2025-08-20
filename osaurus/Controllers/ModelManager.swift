@@ -26,6 +26,7 @@ final class ModelManager: NSObject, ObservableObject {
     // MARK: - Published Properties
     @Published var availableModels: [MLXModel] = []
     @Published var downloadStates: [String: DownloadState] = [:]
+    @Published var isLoadingModels: Bool = false
     
     // MARK: - Properties
     nonisolated(unsafe) static var modelsDirectory: URL = {
@@ -49,6 +50,7 @@ final class ModelManager: NSObject, ObservableObject {
     private var activeDownloadTasks: [String: Task<Void, Never>] = [:] // modelId -> Task
     private var downloadTokens: [String: UUID] = [:] // modelId -> token to gate progress/state updates
     private var cancellables = Set<AnyCancellable>()
+    private var inFlightDetailFetches: Set<String> = [] // modelId set for size/detail fetches
     
     // MARK: - Initialization
     override init() {
@@ -61,80 +63,67 @@ final class ModelManager: NSObject, ObservableObject {
     
     /// Load popular MLX models
     func loadAvailableModels() {
-        // Popular MLX-compatible LLM models
-        availableModels = [
-            MLXModel(
-                id: "mlx-community/Llama-3.2-3B-Instruct-4bit",
-                name: "Llama 3.2 3B Instruct",
-                description: "Meta's latest efficient 3B parameter model with strong reasoning",
-                size: 1_932_735_283, // ~1.8GB
-                downloadURL: "https://huggingface.co/mlx-community/Llama-3.2-3B-Instruct-4bit",
-                requiredFiles: ["model.safetensors", "config.json", "tokenizer_config.json", "tokenizer.json", "special_tokens_map.json"]
-            ),
-            MLXModel(
-                id: "mlx-community/Llama-3.2-1B-Instruct-4bit",
-                name: "Llama 3.2 1B Instruct",
-                description: "Meta's ultra-compact 1B model for edge deployment",
-                size: 805_306_368, // ~768MB
-                downloadURL: "https://huggingface.co/mlx-community/Llama-3.2-1B-Instruct-4bit",
-                requiredFiles: ["model.safetensors", "config.json", "tokenizer_config.json", "tokenizer.json", "special_tokens_map.json"]
-            ),
-            MLXModel(
-                id: "mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit",
-                name: "DeepSeek-R1 Distill 1.5B",
-                description: "DeepSeek's reasoning model distilled to 1.5B parameters",
-                size: 1_073_741_824, // ~1GB
-                downloadURL: "https://huggingface.co/mlx-community/DeepSeek-R1-Distill-Qwen-1.5B-4bit",
-                requiredFiles: ["model.safetensors", "config.json", "tokenizer_config.json", "tokenizer.json", "special_tokens_map.json"]
-            ),
-            MLXModel(
-                id: "mlx-community/gemma-2-9b-it-4bit",
-                name: "Gemma 2 9B Instruct",
-                description: "Google's powerful 9B instruction-tuned model",
-                size: 5_905_580_032, // ~5.5GB
-                downloadURL: "https://huggingface.co/mlx-community/gemma-2-9b-it-4bit",
-                requiredFiles: ["model.safetensors", "config.json", "tokenizer_config.json", "tokenizer.json", "special_tokens_map.json"]
-            ),
-            MLXModel(
-                id: "mlx-community/gemma-2-2b-it-4bit",
-                name: "Gemma 2 2B Instruct",
-                description: "Google's efficient 2B model with strong capabilities",
-                size: 1_503_238_553, // ~1.4GB
-                downloadURL: "https://huggingface.co/mlx-community/gemma-2-2b-it-4bit",
-                requiredFiles: ["model.safetensors", "config.json", "tokenizer_config.json", "tokenizer.json", "special_tokens_map.json"]
-            ),
-            MLXModel(
-                id: "mlx-community/Qwen2.5-7B-Instruct-4bit",
-                name: "Qwen 2.5 7B Instruct",
-                description: "Alibaba's latest 7B multilingual model with 128K context",
-                size: 4_831_838_208, // ~4.5GB
-                downloadURL: "https://huggingface.co/mlx-community/Qwen2.5-7B-Instruct-4bit",
-                requiredFiles: ["model.safetensors", "config.json", "tokenizer_config.json", "tokenizer.json", "special_tokens_map.json"]
-            ),
-            MLXModel(
-                id: "mlx-community/Qwen2.5-3B-Instruct-4bit",
-                name: "Qwen 2.5 3B Instruct",
-                description: "Alibaba's compact 3B model with strong performance",
-                size: 2_040_109_465, // ~1.9GB
-                downloadURL: "https://huggingface.co/mlx-community/Qwen2.5-3B-Instruct-4bit",
-                requiredFiles: ["model.safetensors", "config.json", "tokenizer_config.json", "tokenizer.json", "special_tokens_map.json"]
-            ),
-            MLXModel(
-                id: "mlx-community/OpenELM-3B-Instruct-4bit",
-                name: "OpenELM 3B (GPT-style)",
-                description: "Apple's efficient open-source language model",
-                size: 1_879_048_192, // ~1.75GB
-                downloadURL: "https://huggingface.co/mlx-community/OpenELM-3B-Instruct-4bit",
-                requiredFiles: ["model.safetensors", "config.json", "tokenizer_config.json", "tokenizer.json", "special_tokens_map.json"]
-            )
-        ]
+        // Start with an empty list, then fetch dynamically from Hugging Face Hub (mlx-community only)
+        availableModels = []
+        downloadStates = [:]
+        isLoadingModels = true
         
-        // Initialize download states
-        for model in availableModels {
-            if model.isDownloaded {
-                downloadStates[model.id] = .completed
-            } else {
-                downloadStates[model.id] = .notStarted
+        // Fetch dynamically from Hugging Face Hub (mlx-community only), then update
+        Task {
+            do {
+                let repos = try await Self.fetchHFRepos()
+                let models = Self.mapReposToMLXModels(repos)
+                await MainActor.run {
+                    self.availableModels = models
+                    // Re-initialize download states for the new list
+                    self.downloadStates = [:]
+                    for model in models {
+                        self.downloadStates[model.id] = model.isDownloaded ? .completed : .notStarted
+                    }
+                    self.isLoadingModels = false
+                }
+            } catch {
+                // Leave list empty on failure; optionally log
+                print("Failed to fetch models from HF: \(error)")
+                await MainActor.run {
+                    self.isLoadingModels = false
+                }
+            }
+        }
+    }
+
+    /// Windowed: prefetch model detail (e.g., sizes) when an item becomes visible
+    func prefetchModelDetailsIfNeeded(for model: MLXModel) {
+        // If size known or a fetch is already running, skip
+        guard model.size == 0 else { return }
+        if inFlightDetailFetches.contains(model.id) { return }
+
+        inFlightDetailFetches.insert(model.id)
+        Task { [weak self] in
+            guard let self else { return }
+            defer { Task { @MainActor in self.inFlightDetailFetches.remove(model.id) } }
+            do {
+                let detailed = try await Self.fetchHFRepoDetail(id: model.id)
+                let totalSize: Int64 = await Self.computeTotalSafetensorsBytes(for: model.id, siblings: detailed.siblings)
+                let newDescription = Self.buildDescription(from: detailed)
+                if totalSize > 0 || newDescription != model.description {
+                    await MainActor.run {
+                        if let idx = self.availableModels.firstIndex(where: { $0.id == model.id }) {
+                            let current = self.availableModels[idx]
+                            let updated = MLXModel(
+                                id: current.id,
+                                name: current.name,
+                                description: newDescription,
+                                size: totalSize > 0 ? totalSize : current.size,
+                                downloadURL: current.downloadURL,
+                                requiredFiles: current.requiredFiles
+                            )
+                            self.availableModels[idx] = updated
+                        }
+                    }
+                }
+            } catch {
+                // Ignore detail errors; size remains 0 and UI can keep showing estimating
             }
         }
     }
@@ -331,6 +320,242 @@ final class ModelManager: NSObject, ObservableObject {
                 try fileManager.copyItem(at: src, to: dst)
             }
         }
+    }
+}
+
+// MARK: - Dynamic model discovery (Hugging Face)
+
+private extension ModelManager {
+    /// Minimal HF API response structures we care about
+    struct HFRepo: Decodable {
+        let id: String
+        let private_: Bool? // "private" is reserved in Swift, map manually
+        let likes: Int?
+        let downloads: Int?
+        let tags: [String]?
+        let siblings: [HFSibling]?
+        let cardData: HFCardData?
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case private_ = "private"
+            case likes
+            case downloads
+            case tags
+            case siblings
+            case cardData
+        }
+    }
+
+    struct HFSibling: Decodable {
+        let rfilename: String
+        let size: Int64?
+    }
+
+    struct HFCardData: Decodable {
+        let short_description: String?
+        let license: String?
+    }
+
+    /// Fetch repos from HF limited to mlx-community, focusing on text-generation models
+    /// This first pulls a lightweight list, then fetches detailed metadata (including file sizes)
+    /// for the top repositories to compute download sizes.
+    static func fetchHFRepos() async throws -> [HFRepo] {
+        // Query params:
+        // - author=mlx-community restricts to that org
+        // - pipeline_tag=text-generation focuses on LLMs
+        // Sorted by downloads, large limit to cover most
+        let urlString = "https://huggingface.co/api/models?author=mlx-community&pipeline_tag=text-generation&sort=downloads&direction=-1&limit=200"
+        guard let url = URL(string: urlString) else { return [] }
+
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw NSError(domain: "HFAPI", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: "Unexpected status"])
+        }
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .useDefaultKeys
+        let listRepos = try decoder.decode([HFRepo].self, from: data)
+
+        // Fetch detailed info (including siblings with sizes) for a subset to avoid rate limits
+        let maxDetailCount = 60
+        let toDetail = Array(listRepos.prefix(maxDetailCount))
+
+        var detailedRepos: [HFRepo] = []
+        detailedRepos.reserveCapacity(toDetail.count)
+
+        try await withThrowingTaskGroup(of: HFRepo?.self) { group in
+            for repo in toDetail {
+                group.addTask {
+                    return try? await fetchHFRepoDetail(id: repo.id)
+                }
+            }
+            for try await result in group {
+                if let repo = result {
+                    detailedRepos.append(repo)
+                }
+            }
+        }
+
+        // Merge: use detailed entries when available; otherwise fall back to list entries
+        let detailedById = Dictionary(uniqueKeysWithValues: detailedRepos.map { ($0.id, $0) })
+        let merged = listRepos.map { detailedById[$0.id] ?? $0 }
+        return merged
+    }
+
+    /// Fetch a single repo with detailed metadata (siblings and sizes)
+    static func fetchHFRepoDetail(id: String) async throws -> HFRepo {
+        let base = "https://huggingface.co/api/models/"
+        // Ask HF to expand siblings so we have filenames and, when available, sizes
+        guard let url = URL(string: base + id + "?expand=siblings") else {
+            throw NSError(domain: "HFAPI", code: -2, userInfo: [NSLocalizedDescriptionKey: "Invalid repo id"])
+        }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw NSError(domain: "HFAPI", code: (response as? HTTPURLResponse)?.statusCode ?? -1, userInfo: [NSLocalizedDescriptionKey: "Unexpected status for detail"])
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .useDefaultKeys
+        return try decoder.decode(HFRepo.self, from: data)
+    }
+
+    /// Compute the total size of all .safetensors files for a repo.
+    /// If HF detail lacks sizes, this will issue HEAD requests to resolve sizes.
+    static func computeTotalSafetensorsBytes(for repoId: String, siblings: [HFSibling]?) async -> Int64 {
+        guard let siblings else { return 0 }
+        let safetensors = siblings.filter { $0.rfilename.hasSuffix(".safetensors") }
+        if safetensors.isEmpty { return 0 }
+
+        // If all sizes are known, sum and return
+        let knownSizes = safetensors.compactMap { $0.size }
+        if knownSizes.count == safetensors.count, let total = knownSizes.reduce(0, +) as Int64? {
+            return total
+        }
+
+        // Otherwise, HEAD each safetensors file to retrieve Content-Length
+        var total: Int64 = 0
+        for file in safetensors {
+            guard let url = URL(string: "https://huggingface.co/\(repoId)/resolve/main/\(file.rfilename)") else { continue }
+            if let length = await headContentLength(for: url) {
+                total += length
+            }
+        }
+        return total
+    }
+
+    /// Perform an HTTP HEAD request and return Content-Length if present
+    static func headContentLength(for url: URL) async -> Int64? {
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.httpMethod = "HEAD"
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return nil }
+            if let value = http.value(forHTTPHeaderField: "Content-Length"), let length = Int64(value) {
+                return length
+            }
+        } catch {
+            // Ignore failures; return nil so callers can skip
+        }
+        return nil
+    }
+
+    /// Map HF repos into our MLXModel representation
+    static func mapReposToMLXModels(_ repos: [HFRepo]) -> [MLXModel] {
+        // Prefer public repos; do not hard-require 'siblings' in list response
+        let candidateRepos = repos.filter { repo in
+            return repo.private_ != true
+        }
+
+        let requiredFiles = [
+            "model.safetensors",
+            "config.json",
+            "tokenizer_config.json",
+            "tokenizer.json",
+            "special_tokens_map.json"
+        ]
+
+        let models: [MLXModel] = candidateRepos.map { repo in
+            // Derive a friendly name and description
+            let name = friendlyName(from: repo.id)
+            let description = buildDescription(from: repo)
+            let size: Int64 = {
+                // Sum known safetensors sizes if present; fallback to 0
+                if let siblings = repo.siblings, !siblings.isEmpty {
+                    return siblings
+                        .filter { $0.rfilename.hasSuffix(".safetensors") }
+                        .compactMap { $0.size }
+                        .reduce(0, +)
+                }
+                // If siblings absent in detail, try estimating: prefer larger common file names
+                // Leave 0 if we cannot infer; UI will still function
+                return 0
+            }()
+
+            return MLXModel(
+                id: repo.id,
+                name: name,
+                description: description,
+                size: size,
+                downloadURL: "https://huggingface.co/\(repo.id)",
+                requiredFiles: requiredFiles
+            )
+        }
+
+        // Sort by downloads (desc) if available; otherwise by name
+        return models.sorted { lhs, rhs in
+            let l = repos.first(where: { $0.id == lhs.id })?.downloads ?? 0
+            let r = repos.first(where: { $0.id == rhs.id })?.downloads ?? 0
+            return l == r ? lhs.name < rhs.name : l > r
+        }
+    }
+
+    static func friendlyName(from repoId: String) -> String {
+        // Take the last path component and title-case-ish
+        let last = repoId.split(separator: "/").last.map(String.init) ?? repoId
+        let spaced = last.replacingOccurrences(of: "-", with: " ")
+        // Keep common tokens uppercase
+        return spaced
+            .replacingOccurrences(of: "llama", with: "Llama", options: .caseInsensitive)
+            .replacingOccurrences(of: "qwen", with: "Qwen", options: .caseInsensitive)
+            .replacingOccurrences(of: "gemma", with: "Gemma", options: .caseInsensitive)
+            .replacingOccurrences(of: "deepseek", with: "DeepSeek", options: .caseInsensitive)
+    }
+
+    static func buildDescription(from repo: HFRepo) -> String {
+        if let short = repo.cardData?.short_description, !short.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return short
+        }
+        // Fall back to tags-based compact summary
+        let tags = repo.tags ?? []
+        let quant = tags.first { $0.lowercased().contains("4bit") || $0.lowercased().contains("8bit") || $0.lowercased().contains("fp16") || $0.lowercased().contains("bf16") }
+        let arch = inferredArch(from: repo.id, tags: tags)
+        var parts: [String] = []
+        if let arch { parts.append(arch) }
+        if let quant { parts.append(quant.uppercased()) }
+        if (tags.contains { $0 == "text-generation" }) { parts.append("text-generation") }
+        if parts.isEmpty { return "Model from mlx-community" }
+        return parts.joined(separator: " • ")
+    }
+
+    static func inferredArch(from id: String, tags: [String]) -> String? {
+        let idLower = id.lowercased()
+        if idLower.contains("llama") { return "Llama" }
+        if idLower.contains("qwen") { return "Qwen" }
+        if idLower.contains("gemma") { return "Gemma" }
+        if idLower.contains("deepseek") { return "DeepSeek" }
+        if idLower.contains("mistral") { return "Mistral" }
+        if idLower.contains("mixtral") { return "Mixtral" }
+        if idLower.contains("phi") { return "Phi" }
+        if let t = tags.first(where: { $0.lowercased().contains("llama") || $0.lowercased().contains("qwen") || $0.lowercased().contains("gemma") || $0.lowercased().contains("deepseek") || $0.lowercased().contains("mistral") }) { return t.capitalized }
+        return nil
     }
 }
 

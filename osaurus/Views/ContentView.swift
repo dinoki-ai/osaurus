@@ -159,6 +159,9 @@ struct ContentView: View {
                         }
                         .buttonStyle(PlainButtonStyle())
                         .help("Manage models")
+                        .popover(isPresented: $showModelManager, attachmentAnchor: .point(.bottom), arrowEdge: .top) {
+                            ModelDownloadView()
+                        }
                     }
                 }
             }
@@ -178,16 +181,14 @@ struct ContentView: View {
         } message: {
             Text(server.lastErrorMessage ?? "An error occurred while managing the server.")
         }
-        .sheet(isPresented: $showModelManager) {
-            ModelDownloadView()
-        }
+        
     }
 
     
     private var statusText: String {
         switch server.serverHealth {
         case .stopped:
-            return "Ready to start"
+            return "Run LLMs locally"
         case .starting:
             return "Starting..."
         case .running:

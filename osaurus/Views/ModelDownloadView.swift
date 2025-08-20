@@ -104,6 +104,7 @@ struct ModelDownloadView: View {
                 TextField("Search models", text: $searchText)
                     .textFieldStyle(PlainTextFieldStyle())
                     .foregroundColor(theme.primaryText)
+                    .accessibilityIdentifier("model_search_field")
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 10)
@@ -155,37 +156,7 @@ struct ModelDownloadView: View {
     }
 
     private var filteredModels: [MLXModel] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return modelManager.availableModels }
-        return modelManager.availableModels.filter { model in
-            // Fuzzy search implementation
-            let searchTargets = [
-                model.name.lowercased(),
-                model.id.lowercased(),
-                model.description.lowercased(),
-                model.downloadURL.lowercased()
-            ]
-            
-            return searchTargets.contains { target in
-                fuzzyMatch(query: query, in: target)
-            }
-        }
-    }
-    
-    // Fuzzy matching function - returns true if all characters in query
-    // appear in the same order in the target string
-    private func fuzzyMatch(query: String, in target: String) -> Bool {
-        var queryIndex = query.startIndex
-        var targetIndex = target.startIndex
-        
-        while queryIndex < query.endIndex && targetIndex < target.endIndex {
-            if query[queryIndex] == target[targetIndex] {
-                queryIndex = query.index(after: queryIndex)
-            }
-            targetIndex = target.index(after: targetIndex)
-        }
-        
-        return queryIndex == query.endIndex
+        SearchService.filterModels(modelManager.availableModels, with: searchText)
     }
 }
 

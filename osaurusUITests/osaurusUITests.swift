@@ -30,6 +30,23 @@ final class osaurusUITests: XCTestCase {
 
         // Use XCTAssert and related functions to verify your tests produce the correct results.
     }
+    
+    @MainActor
+    func testModelSearchFunctionality() throws {
+        // This test is a placeholder for UI testing the search functionality
+        // It requires knowing how to navigate to the ModelDownloadView
+        // which depends on the specific UI implementation
+        
+        // Example test structure:
+        // 1. Launch app
+        // 2. Navigate to model download view (implementation specific)
+        // 3. Find search field by accessibility identifier
+        // 4. Type search query
+        // 5. Verify filtered results
+        
+        // Skip this test for now as it requires UI navigation setup
+        XCTSkip("ModelDownloadView navigation not implemented in test")
+    }
 
     @MainActor
     func testLaunchPerformance() throws {

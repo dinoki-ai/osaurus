@@ -13,7 +13,8 @@ import Testing
 struct osaurusTests {
 
     @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+        // Basic test to ensure the test framework is working
+        #expect(1 + 1 == 2)
     }
 
     @Test func serverConfiguration_portValidation() async throws {

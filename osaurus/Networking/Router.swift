@@ -112,7 +112,7 @@ public struct Router {
     }
     
     private func modelsEndpoint() -> (HTTPResponseStatus, [(String, String)], String) {
-        let models = MLXService.shared.getAvailableModels().map { modelName in
+        let models = MLXService.getAvailableModels().map { modelName in
             OpenAIModel(from: modelName)
         }
         

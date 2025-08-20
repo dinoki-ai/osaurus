@@ -285,7 +285,7 @@ struct ModelRowView: View {
                 isPrimary: false
             )
             
-        case .failed(let error):
+        case .failed(_):
             VStack(alignment: .trailing, spacing: 8) {
                 StatusBadge(
                     status: "Failed",

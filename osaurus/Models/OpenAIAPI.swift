@@ -2,7 +2,7 @@
 //  OpenAIAPI.swift
 //  osaurus
 //
-//  Created by Osaurus on 1/29/25.
+//  Created by Terence on 8/17/25.
 //
 
 import Foundation
@@ -12,17 +12,17 @@ import Foundation
 /// OpenAI-compatible model object
 struct OpenAIModel: Codable {
     let id: String
-    let object: String = "model"
+    var object: String = "model"
     let created: Int
-    let owned_by: String = "osaurus"
-    let permission: [String] = []
+    var owned_by: String = "osaurus"
+    var permission: [String] = []
     let root: String
-    let parent: String? = nil
+    var parent: String? = nil
 }
 
 /// Response for /models endpoint
 struct ModelsResponse: Codable {
-    let object: String = "list"
+    var object: String = "list"
     let data: [OpenAIModel]
 }
 
@@ -63,7 +63,7 @@ struct Usage: Codable {
 /// Chat completion response
 struct ChatCompletionResponse: Codable {
     let id: String
-    let object: String = "chat.completion"
+    var object: String = "chat.completion"
     let created: Int
     let model: String
     let choices: [ChatChoice]
@@ -89,7 +89,7 @@ struct StreamChoice: Codable {
 /// Chat completion chunk for streaming
 struct ChatCompletionChunk: Codable {
     let id: String
-    let object: String = "chat.completion.chunk"
+    var object: String = "chat.completion.chunk"
     let created: Int
     let model: String
     let choices: [StreamChoice]

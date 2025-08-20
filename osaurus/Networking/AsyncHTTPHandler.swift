@@ -2,7 +2,7 @@
 //  AsyncHTTPHandler.swift
 //  osaurus
 //
-//  Created by Osaurus on 1/29/25.
+//  Created by Terence on 8/17/25.
 //
 
 import Foundation
@@ -23,8 +23,8 @@ class AsyncHTTPHandler {
     ) {
         Task {
             do {
-                // Find the model
-                guard let model = MLXService.shared.findModel(named: request.model) else {
+                // Find the model using nonisolated static accessor
+                guard let model = MLXService.findModel(named: request.model) else {
                     let error = OpenAIError(
                         error: OpenAIError.ErrorDetail(
                             message: "Model not found: \(request.model)",
@@ -105,9 +105,10 @@ class AsyncHTTPHandler {
         responseHead.headers = nioHeaders
         
         // Ensure header write happens on the channel's event loop
-        context.eventLoop.execute {
-            context.write(handler.wrapOutboundOut(.head(responseHead)), promise: nil)
-            context.flush()
+        let channel = context.channel
+        channel.eventLoop.execute {
+            channel.write(HTTPServerResponsePart.head(responseHead), promise: nil)
+            channel.flush()
         }
         
         // Generate response ID
@@ -148,11 +149,12 @@ class AsyncHTTPHandler {
             if let jsonData = try? JSONEncoder().encode(chunk),
                let jsonString = String(data: jsonData, encoding: .utf8) {
                 let sseData = "data: \(jsonString)\n\n"
-                context.eventLoop.execute {
-                    var buffer = context.channel.allocator.buffer(capacity: sseData.utf8.count)
+                let channel = context.channel
+                channel.eventLoop.execute {
+                    var buffer = channel.allocator.buffer(capacity: sseData.utf8.count)
                     buffer.writeString(sseData)
-                    context.write(handler.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
-                    context.flush()
+                    channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
+                    channel.flush()
                 }
             }
         }
@@ -175,12 +177,13 @@ class AsyncHTTPHandler {
         if let jsonData = try? JSONEncoder().encode(finalChunk),
            let jsonString = String(data: jsonData, encoding: .utf8) {
             let sseData = "data: \(jsonString)\n\ndata: [DONE]\n\n"
-            context.eventLoop.execute {
-                var buffer = context.channel.allocator.buffer(capacity: sseData.utf8.count)
+            let channel = context.channel
+            channel.eventLoop.execute {
+                var buffer = channel.allocator.buffer(capacity: sseData.utf8.count)
                 buffer.writeString(sseData)
-                context.writeAndFlush(handler.wrapOutboundOut(.body(.byteBuffer(buffer)))).whenComplete { _ in
-                    context.writeAndFlush(handler.wrapOutboundOut(.end(nil))).whenComplete { _ in
-                        context.close(promise: nil)
+                channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).whenComplete { _ in
+                    channel.writeAndFlush(HTTPServerResponsePart.end(nil)).whenComplete { _ in
+                        channel.close(promise: nil)
                     }
                 }
             }
@@ -245,9 +248,10 @@ class AsyncHTTPHandler {
         let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
         
         // Send response on the event loop
-        context.eventLoop.execute {
+        let channel = context.channel
+        channel.eventLoop.execute {
             var responseHead = HTTPResponseHead(version: .http1_1, status: status)
-            var buffer = context.channel.allocator.buffer(capacity: jsonString.utf8.count)
+            var buffer = channel.allocator.buffer(capacity: jsonString.utf8.count)
             buffer.writeString(jsonString)
             
             var headers = HTTPHeaders()
@@ -256,10 +260,10 @@ class AsyncHTTPHandler {
             headers.add(name: "Connection", value: "close")
             responseHead.headers = headers
             
-            context.write(handler.wrapOutboundOut(.head(responseHead)), promise: nil)
-            context.write(handler.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
-            context.writeAndFlush(handler.wrapOutboundOut(.end(nil))).whenComplete { _ in
-                context.close(promise: nil)
+            channel.write(HTTPServerResponsePart.head(responseHead), promise: nil)
+            channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
+            channel.writeAndFlush(HTTPServerResponsePart.end(nil)).whenComplete { _ in
+                channel.close(promise: nil)
             }
         }
     }

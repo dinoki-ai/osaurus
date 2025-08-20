@@ -2,7 +2,7 @@
 //  MLXService.swift
 //  osaurus
 //
-//  Created by Osaurus on 1/29/25.
+//  Created by Terence on 8/17/25.
 //
 
 import Foundation
@@ -41,7 +41,7 @@ class MLXService {
     static let shared = MLXService()
     
     /// Thread-safe cache of available model names
-    private static let availableModelsCache = NSCache<NSString, NSArray>()
+    nonisolated(unsafe) private static let availableModelsCache = NSCache<NSString, NSArray>()
     
     /// List of available models that can be used for generation.
     /// Dynamically generated from downloaded models
@@ -101,7 +101,7 @@ class MLXService {
     }
     
     /// Get list of available models that are downloaded (thread-safe)
-    nonisolated func getAvailableModels() -> [String] {
+    nonisolated static func getAvailableModels() -> [String] {
         // Try to get from cache first
         if let cached = Self.availableModelsCache.object(forKey: "models" as NSString) as? [String] {
             return cached
@@ -113,7 +113,7 @@ class MLXService {
     }
     
     /// Find a model by name
-    nonisolated func findModel(named name: String) -> LMModel? {
+    nonisolated static func findModel(named name: String) -> LMModel? {
         // Check if we have cached model info
         if let cachedModels = Self.availableModelsCache.object(forKey: "modelInfo" as NSString) as? [[String: String]] {
             for modelInfo in cachedModels {

@@ -120,3 +120,5 @@ Temporary Items
 *.bin
 ggml-*.bin
 ggml-*.metal
+
+.env

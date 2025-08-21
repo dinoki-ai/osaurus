@@ -1,9 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Backward-compat: if DEVELOPMENT_TEAM not set, fall back to APPLE_TEAM_ID
+if [[ -z "${DEVELOPMENT_TEAM:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
+  export DEVELOPMENT_TEAM="${APPLE_TEAM_ID}"
+fi
+
 : "${DEVELOPMENT_TEAM:?DEVELOPMENT_TEAM is required}"
+: "${DEVELOPER_ID_NAME:?DEVELOPER_ID_NAME is required}"
+: "${VERSION:?VERSION is required}"
 
 echo "Building ARM64 version (default)..."
+
+# Normalize identity: allow DEVELOPER_ID_NAME with or without the product prefix
+CODE_SIGN_IDENTITY_VALUE="${DEVELOPER_ID_NAME}"
+if [[ "${CODE_SIGN_IDENTITY_VALUE}" != Developer\ ID\ Application:* ]]; then
+  CODE_SIGN_IDENTITY_VALUE="Developer ID Application: ${CODE_SIGN_IDENTITY_VALUE}"
+fi
 
 xcodebuild -project osaurus.xcodeproj \
   -scheme osaurus \
@@ -14,7 +27,7 @@ xcodebuild -project osaurus.xcodeproj \
   ONLY_ACTIVE_ARCH=NO \
   MARKETING_VERSION="${VERSION}" \
   CURRENT_PROJECT_VERSION="${VERSION}" \
-  CODE_SIGN_IDENTITY="Developer ID Application: ${DEVELOPER_ID_NAME}" \
+  CODE_SIGN_IDENTITY="${CODE_SIGN_IDENTITY_VALUE}" \
   DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM}" \
   CODE_SIGN_STYLE=Manual \
   clean archive -archivePath build/osaurus.xcarchive

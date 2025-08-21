@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Create output directory
+mkdir -p build_output
+
+# Determine VERSION and export to GitHub environment
+if [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
+  TAG="${GITHUB_REF#refs/tags/}"
+  VERSION_NO_V="${TAG#v}"
+  echo "VERSION=${VERSION_NO_V}" >> "$GITHUB_ENV"
+  echo "Building version: ${VERSION_NO_V}"
+else
+  echo "VERSION=1.0.0-dev" >> "$GITHUB_ENV"
+  echo "Building version: 1.0.0-dev"
+fi
+
+

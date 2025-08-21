@@ -90,12 +90,13 @@ class MLXService {
     
     /// Update the cached list of available models
     func updateAvailableModelsCache() {
-        let modelNames = availableModels.map { $0.name }
+        let pairs = Self.scanDiskForModels()
+        let modelNames = pairs.map { $0.name }
         Self.availableModelsCache.setObject(modelNames as NSArray, forKey: "models" as NSString)
-        
+
         // Also cache model info for findModel
-        let modelInfo = availableModels.map { model in
-            ["name": model.name, "id": model.modelId]
+        let modelInfo = pairs.map { pair in
+            ["name": pair.name, "id": pair.id]
         }
         Self.availableModelsCache.setObject(modelInfo as NSArray, forKey: "modelInfo" as NSString)
     }
@@ -106,10 +107,14 @@ class MLXService {
         if let cached = Self.availableModelsCache.object(forKey: "models" as NSString) as? [String] {
             return cached
         }
-        
-        // Return empty list if cache is not populated
-        // The cache will be updated when models are loaded
-        return []
+
+        // Lazily populate from disk if cache is empty
+        let pairs = Self.scanDiskForModels()
+        let modelNames = pairs.map { $0.name }
+        Self.availableModelsCache.setObject(modelNames as NSArray, forKey: "models" as NSString)
+        let modelInfo = pairs.map { ["name": $0.name, "id": $0.id] }
+        Self.availableModelsCache.setObject(modelInfo as NSArray, forKey: "modelInfo" as NSString)
+        return modelNames
     }
     
     /// Find a model by name
@@ -122,7 +127,117 @@ class MLXService {
                 }
             }
         }
-        
+
+        // Fallback: populate from disk and try again
+        let pairs = Self.scanDiskForModels()
+        // Try exact repo-name match first (lowercased)
+        if let match = pairs.first(where: { $0.name == name }) {
+            return LMModel(name: match.name, modelId: match.id)
+        }
+        // Try matching against full id's repo component (case-insensitive)
+        if let match = pairs.first(where: { pair in
+            let repo = pair.id.split(separator: "/").last.map(String.init)?.lowercased()
+            return repo == name.lowercased()
+        }) {
+            return LMModel(name: match.name, modelId: match.id)
+        }
+        // Try full id match (case-insensitive)
+        if let match = pairs.first(where: { $0.id.lowercased() == name.lowercased() }) {
+            return LMModel(name: match.name, modelId: match.id)
+        }
+        return nil
+    }
+
+    // MARK: - Disk Scanning for Downloaded Models
+    /// Discover models on disk by inspecting the models directory.
+    /// Returns pairs of (name, id) where id is "org/repo" and name is the repo lowercased.
+    nonisolated private static func scanDiskForModels() -> [(name: String, id: String)] {
+        let fm = FileManager.default
+        let root = ModelManager.modelsDirectory
+        guard let topLevel = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else {
+            return []
+        }
+        var results: [(String, String)] = []
+
+        func validateAndAppend(org: String, repo: String, repoURL: URL) {
+            // Required JSON metadata files
+            let jsonFiles = [
+                "config.json",
+                "tokenizer.json",
+                "tokenizer_config.json",
+                "special_tokens_map.json"
+            ]
+            let jsonOk = jsonFiles.allSatisfy { name in
+                fm.fileExists(atPath: repoURL.appendingPathComponent(name).path)
+            }
+            guard jsonOk else { return }
+
+            // At least one weights file
+            guard let items = try? fm.contentsOfDirectory(at: repoURL, includingPropertiesForKeys: nil),
+                  items.contains(where: { $0.pathExtension == "safetensors" }) else { return }
+
+            let id = "\(org)/\(repo)"
+            let name = repo.lowercased()
+            results.append((name, id))
+        }
+
+        // Case 1: nested org/repo directories (current layout)
+        for orgURL in topLevel {
+            var isOrgDir: ObjCBool = false
+            guard fm.fileExists(atPath: orgURL.path, isDirectory: &isOrgDir), isOrgDir.boolValue else { continue }
+            guard let repos = try? fm.contentsOfDirectory(at: orgURL, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else { continue }
+            for repoURL in repos {
+                var isRepoDir: ObjCBool = false
+                guard fm.fileExists(atPath: repoURL.path, isDirectory: &isRepoDir), isRepoDir.boolValue else { continue }
+                validateAndAppend(org: orgURL.lastPathComponent, repo: repoURL.lastPathComponent, repoURL: repoURL)
+            }
+        }
+
+        // Case 2: legacy single-level directories with "%2F" encoded slashes
+        for encodedURL in topLevel {
+            let dirName = encodedURL.lastPathComponent
+            guard dirName.contains("%2F") else { continue }
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: encodedURL.path, isDirectory: &isDir), isDir.boolValue else { continue }
+            let parts = dirName.components(separatedBy: "%2F")
+            guard parts.count == 2 else { continue }
+            let org = parts[0]
+            let repo = parts[1]
+            validateAndAppend(org: org, repo: repo, repoURL: encodedURL)
+        }
+
+        // De-duplicate while preserving order
+        var seen: Set<String> = []
+        var unique: [(String, String)] = []
+        for (name, id) in results {
+            if !seen.contains(id) {
+                seen.insert(id)
+                unique.append((name, id))
+            }
+        }
+        return unique
+    }
+
+    /// Locate local directory for a given model id ("org/repo") if files exist
+    nonisolated private static func findLocalDirectory(forModelId id: String) -> URL? {
+        let parts = id.split(separator: "/").map(String.init)
+        let url: URL = parts.reduce(ModelManager.modelsDirectory) { partial, component in
+            partial.appendingPathComponent(component, isDirectory: true)
+        }
+        let fm = FileManager.default
+        let hasConfig = fm.fileExists(atPath: url.appendingPathComponent("config.json").path)
+        if let items = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil),
+           hasConfig && items.contains(where: { $0.pathExtension == "safetensors" }) {
+            return url
+        }
+        // Legacy encoded folder name
+        let encoded = id.replacingOccurrences(of: "/", with: "%2F")
+        let encodedURL = ModelManager.modelsDirectory.appendingPathComponent(encoded, isDirectory: true)
+        let hasConfig2 = fm.fileExists(atPath: encodedURL.appendingPathComponent("config.json").path)
+        if let items2 = try? fm.contentsOfDirectory(at: encodedURL, includingPropertiesForKeys: nil),
+           hasConfig2 && items2.contains(where: { $0.pathExtension == "safetensors" }) {
+            return encodedURL
+        }
         return nil
     }
     
@@ -132,15 +247,27 @@ class MLXService {
             return holder
         }
 
-        guard let downloadedModel = ModelManager.shared.availableModels.first(
-            where: { $0.id == model.modelId && $0.isDownloaded }
-        ) else {
+        // Prefer ModelManager knowledge when available; otherwise derive the directory from the id
+        let localURL: URL = {
+            if let downloadedModel = ModelManager.shared.availableModels.first(where: { $0.id == model.modelId && $0.isDownloaded }) {
+                return downloadedModel.localDirectory
+            }
+            if let url = Self.findLocalDirectory(forModelId: model.modelId) {
+                return url
+            }
+            return ModelManager.modelsDirectory // placeholder; will fail validation below
+        }()
+        
+        // Validate the directory has required files
+        let fm = FileManager.default
+        let hasConfig = fm.fileExists(atPath: localURL.appendingPathComponent("config.json").path)
+        let hasWeights: Bool = (try? fm.contentsOfDirectory(at: localURL, includingPropertiesForKeys: nil))?.contains(where: { $0.pathExtension == "safetensors" }) ?? false
+        guard hasConfig && hasWeights else {
             throw NSError(domain: "MLXService", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "Model not downloaded: \(model.name)"
             ])
         }
 
-        let localURL = downloadedModel.localDirectory
         let container = try await loadModelContainer(directory: localURL)
         let session = ChatSession(container)
         let holder = SessionHolder(container: container, session: session)

@@ -54,11 +54,12 @@ final class ServerController: ObservableObject {
             let group = MultiThreadedEventLoopGroup(numberOfThreads: configuration.numberOfThreads)
             self.eventLoopGroup = group
 
-            // Bootstrap server
-            let bootstrap = createServerBootstrap(group: group)
+            // Bootstrap server using a nonisolated creator to avoid MainActor hops
+            let currentConfig = self.configuration
+            let bootstrap = ServerController.createServerBootstrap(group: group, configuration: currentConfig)
 
-            // Bind to configured host and port
-            let channel = try bootstrap.bind(host: configuration.host, port: configuration.port).wait()
+            // Bind to configured host and port (async-safe)
+            let channel = try await bootstrap.bind(host: configuration.host, port: configuration.port).get()
             self.serverChannel = channel
 
             // Update state
@@ -87,7 +88,7 @@ final class ServerController: ObservableObject {
 
         // Close the server channel if present
         if let channel = serverChannel {
-            do { try channel.close().wait() } catch { print("[Osaurus] Error closing channel: \(error)") }
+            do { try await channel.close().get() } catch { print("[Osaurus] Error closing channel: \(error)") }
             serverChannel = nil
         }
 
@@ -106,7 +107,7 @@ final class ServerController: ObservableObject {
         serverHealth = .stopping
 
         if let channel = serverChannel {
-            do { try channel.close().wait() } catch { print("[Osaurus] Error closing channel: \(error)") }
+            do { try await channel.close().get() } catch { print("[Osaurus] Error closing channel: \(error)") }
             serverChannel = nil
         }
 
@@ -131,8 +132,8 @@ final class ServerController: ObservableObject {
 
     // MARK: - Private Helpers
     
-    /// Creates configured server bootstrap
-    private func createServerBootstrap(group: EventLoopGroup) -> ServerBootstrap {
+    /// Creates configured server bootstrap outside of MainActor to ensure pipeline ops run on the channel's EventLoop
+    nonisolated static func createServerBootstrap(group: EventLoopGroup, configuration: ServerConfiguration) -> ServerBootstrap {
         ServerBootstrap(group: group)
             // Server options
             .serverChannelOption(ChannelOptions.backlog, value: configuration.backlog)
@@ -144,6 +145,7 @@ final class ServerController: ObservableObject {
                 }
             }
             .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .childChannelOption(ChannelOptions.socketOption(.tcp_nodelay), value: 1)
             .childChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
             .childChannelOption(ChannelOptions.recvAllocator, value: AdaptiveRecvByteBufferAllocator())
     }

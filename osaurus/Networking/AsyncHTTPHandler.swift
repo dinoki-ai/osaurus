@@ -6,8 +6,12 @@
 //
 
 import Foundation
-import NIOCore
-import NIOHTTP1
+@preconcurrency import NIOCore
+@preconcurrency import NIOHTTP1
+
+private struct UncheckedSendableBox<T>: @unchecked Sendable {
+    let value: T
+}
 
 /// Handles async operations for HTTP endpoints
 class AsyncHTTPHandler {
@@ -18,65 +22,60 @@ class AsyncHTTPHandler {
     /// Handle chat completions with streaming support
     func handleChatCompletion(
         request: ChatCompletionRequest,
-        context: ChannelHandlerContext,
-        handler: HTTPHandler
-    ) {
-        Task {
-            do {
-                // Find the model using nonisolated static accessor
-                guard let model = MLXService.findModel(named: request.model) else {
-                    let error = OpenAIError(
-                        error: OpenAIError.ErrorDetail(
-                            message: "Model not found: \(request.model)",
-                            type: "invalid_request_error",
-                            param: "model",
-                            code: nil
-                        )
-                    )
-                    try await sendJSONResponse(error, status: .notFound, context: context, handler: handler)
-                    return
-                }
-                
-                // Convert messages
-                let messages = request.toInternalMessages()
-                
-                // Get generation parameters
-                let temperature = request.temperature ?? 0.7
-                let maxTokens = request.max_tokens ?? 2048
-                
-                // Check if streaming is requested
-                if request.stream ?? false {
-                    try await handleStreamingResponse(
-                        messages: messages,
-                        model: model,
-                        temperature: temperature,
-                        maxTokens: maxTokens,
-                        requestModel: request.model,
-                        context: context,
-                        handler: handler
-                    )
-                } else {
-                    try await handleNonStreamingResponse(
-                        messages: messages,
-                        model: model,
-                        temperature: temperature,
-                        maxTokens: maxTokens,
-                        requestModel: request.model,
-                        context: context,
-                        handler: handler
-                    )
-                }
-            } catch {
-                let errorResponse = OpenAIError(
+        context: ChannelHandlerContext
+    ) async {
+        do {
+            // Find the model using nonisolated static accessor
+            guard let model = MLXService.findModel(named: request.model) else {
+                let error = OpenAIError(
                     error: OpenAIError.ErrorDetail(
-                        message: error.localizedDescription,
-                        type: "internal_error",
-                        param: nil,
+                        message: "Model not found: \(request.model)",
+                        type: "invalid_request_error",
+                        param: "model",
                         code: nil
                     )
                 )
-                try? await sendJSONResponse(errorResponse, status: .internalServerError, context: context, handler: handler)
+                try await sendJSONResponse(error, status: .notFound, context: context)
+                return
             }
+            
+            // Convert messages
+            let messages = request.toInternalMessages()
+            
+            // Get generation parameters
+            let temperature = request.temperature ?? 0.7
+            let maxTokens = request.max_tokens ?? 2048
+            
+            // Check if streaming is requested
+            if request.stream ?? false {
+                try await handleStreamingResponse(
+                    messages: messages,
+                    model: model,
+                    temperature: temperature,
+                    maxTokens: maxTokens,
+                    requestModel: request.model,
+                    context: context
+                )
+            } else {
+                try await handleNonStreamingResponse(
+                    messages: messages,
+                    model: model,
+                    temperature: temperature,
+                    maxTokens: maxTokens,
+                    requestModel: request.model,
+                    context: context
+                )
+            }
+        } catch {
+            let errorResponse = OpenAIError(
+                error: OpenAIError.ErrorDetail(
+                    message: error.localizedDescription,
+                    type: "internal_error",
+                    param: nil,
+                    code: nil
+                )
+            )
+            try? await sendJSONResponse(errorResponse, status: .internalServerError, context: context)
         }
     }
     
@@ -86,9 +85,10 @@ class AsyncHTTPHandler {
         temperature: Float,
         maxTokens: Int,
         requestModel: String,
-        context: ChannelHandlerContext,
-        handler: HTTPHandler
+        context: ChannelHandlerContext
     ) async throws {
+        let loop = context.eventLoop
+        let ctxBox = UncheckedSendableBox(value: context)
         // Send SSE headers
         let headers: [(String, String)] = [
             ("Content-Type", "text/event-stream"),
@@ -105,10 +105,11 @@ class AsyncHTTPHandler {
         responseHead.headers = nioHeaders
         
         // Ensure header write happens on the channel's event loop
-        let channel = context.channel
-        channel.eventLoop.execute {
-            channel.write(HTTPServerResponsePart.head(responseHead), promise: nil)
-            channel.flush()
+        loop.execute {
+            let context = ctxBox.value
+            guard context.channel.isActive else { return }
+            context.write(NIOAny(HTTPServerResponsePart.head(responseHead)), promise: nil)
+            context.flush()
         }
         
         // Generate response ID
@@ -127,6 +128,7 @@ class AsyncHTTPHandler {
         var tokenCount = 0
         
         for await token in stream {
+            // Stop streaming if the client disconnected
             fullResponse += token
             tokenCount += 1
             
@@ -149,12 +151,13 @@ class AsyncHTTPHandler {
             if let jsonData = try? JSONEncoder().encode(chunk),
                let jsonString = String(data: jsonData, encoding: .utf8) {
                 let sseData = "data: \(jsonString)\n\n"
-                let channel = context.channel
-                channel.eventLoop.execute {
-                    var buffer = channel.allocator.buffer(capacity: sseData.utf8.count)
+                loop.execute {
+                    let context = ctxBox.value
+                    guard context.channel.isActive else { return }
+                    var buffer = context.channel.allocator.buffer(capacity: sseData.utf8.count)
                     buffer.writeString(sseData)
-                    channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
-                    channel.flush()
+                    context.write(NIOAny(HTTPServerResponsePart.body(.byteBuffer(buffer))), promise: nil)
+                    context.flush()
                 }
             }
         }
@@ -177,14 +180,16 @@ class AsyncHTTPHandler {
         if let jsonData = try? JSONEncoder().encode(finalChunk),
            let jsonString = String(data: jsonData, encoding: .utf8) {
             let sseData = "data: \(jsonString)\n\ndata: [DONE]\n\n"
-            let channel = context.channel
-            channel.eventLoop.execute {
-                var buffer = channel.allocator.buffer(capacity: sseData.utf8.count)
+            loop.execute {
+                let context = ctxBox.value
+                guard context.channel.isActive else { return }
+                var buffer = context.channel.allocator.buffer(capacity: sseData.utf8.count)
                 buffer.writeString(sseData)
-                channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(buffer))).whenComplete { _ in
-                    channel.writeAndFlush(HTTPServerResponsePart.end(nil)).whenComplete { _ in
-                        channel.close(promise: nil)
-                    }
+                context.write(NIOAny(HTTPServerResponsePart.body(.byteBuffer(buffer))), promise: nil)
+                context.flush()
+                context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil as HTTPHeaders?))).whenComplete { _ in
+                    let context = ctxBox.value
+                    context.close(promise: nil)
                 }
             }
         }
@@ -196,8 +201,7 @@ class AsyncHTTPHandler {
         temperature: Float,
         maxTokens: Int,
         requestModel: String,
-        context: ChannelHandlerContext,
-        handler: HTTPHandler
+        context: ChannelHandlerContext
     ) async throws {
         // Generate complete response
         let stream = try await MLXService.shared.generate(
@@ -235,23 +239,25 @@ class AsyncHTTPHandler {
             system_fingerprint: nil
         )
         
-        try await sendJSONResponse(response, status: .ok, context: context, handler: handler)
+        try await sendJSONResponse(response, status: .ok, context: context)
     }
     
     private func sendJSONResponse<T: Encodable>(
         _ response: T,
         status: HTTPResponseStatus,
-        context: ChannelHandlerContext,
-        handler: HTTPHandler
+        context: ChannelHandlerContext
     ) async throws {
+        let loop = context.eventLoop
+        let ctxBox = UncheckedSendableBox(value: context)
         let jsonData = try JSONEncoder().encode(response)
         let jsonString = String(data: jsonData, encoding: .utf8) ?? "{}"
         
         // Send response on the event loop
-        let channel = context.channel
-        channel.eventLoop.execute {
+        loop.execute {
+            let context = ctxBox.value
+            guard context.channel.isActive else { return }
             var responseHead = HTTPResponseHead(version: .http1_1, status: status)
-            var buffer = channel.allocator.buffer(capacity: jsonString.utf8.count)
+            var buffer = context.channel.allocator.buffer(capacity: jsonString.utf8.count)
             buffer.writeString(jsonString)
             
             var headers = HTTPHeaders()
@@ -260,10 +266,11 @@ class AsyncHTTPHandler {
             headers.add(name: "Connection", value: "close")
             responseHead.headers = headers
             
-            channel.write(HTTPServerResponsePart.head(responseHead), promise: nil)
-            channel.write(HTTPServerResponsePart.body(.byteBuffer(buffer)), promise: nil)
-            channel.writeAndFlush(HTTPServerResponsePart.end(nil)).whenComplete { _ in
-                channel.close(promise: nil)
+            context.write(NIOAny(HTTPServerResponsePart.head(responseHead)), promise: nil)
+            context.write(NIOAny(HTTPServerResponsePart.body(.byteBuffer(buffer))), promise: nil)
+            context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil as HTTPHeaders?))).whenComplete { _ in
+                let context = ctxBox.value
+                context.close(promise: nil)
             }
         }
     }

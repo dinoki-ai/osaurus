@@ -8,6 +8,7 @@
 import SwiftUI
 import AppKit
 import Combine
+import Sparkle
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -15,6 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     private var cancellables: Set<AnyCancellable> = []
+    let updater = UpdaterViewModel()
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Configure as menu bar app (hide Dock icon)
@@ -125,6 +127,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         })
             .environmentObject(serverController)
             .environment(\.theme, themeManager.currentTheme)
+            .environmentObject(updater)
 
         popover.contentViewController = NSHostingController(rootView: contentView)
         self.popover = popover

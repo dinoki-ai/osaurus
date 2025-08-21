@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F06F83462E56B319007CD59B /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F06F83452E56B319007CD59B /* Sparkle */; };
 		F0BB3CA02E52234700895593 /* NIO in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3C9F2E52234700895593 /* NIO */; };
 		F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA12E52234700895593 /* NIOConcurrencyHelpers */; };
 		F0BB3CA42E52234700895593 /* NIOCore in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA32E52234700895593 /* NIOCore */; };
@@ -69,6 +70,7 @@
 				F0BB3CA02E52234700895593 /* NIO in Frameworks */,
 				F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */,
 				F0C60D622E53DE140028ED4F /* MLX in Frameworks */,
+				F06F83462E56B319007CD59B /* Sparkle in Frameworks */,
 				F0BB3CA62E52240500895593 /* NIOHTTP1 in Frameworks */,
 				F0C60E872E54A26A0028ED4F /* Transformers in Frameworks */,
 				F0C60D762E5491A10028ED4F /* MLXVLM in Frameworks */,
@@ -150,6 +152,7 @@
 				F0C60D732E5491A10028ED4F /* MLXLMCommon */,
 				F0C60D752E5491A10028ED4F /* MLXVLM */,
 				F0C60E862E54A26A0028ED4F /* Transformers */,
+				F06F83452E56B319007CD59B /* Sparkle */,
 			);
 			productName = osaurus;
 			productReference = F0BB3C262E51FBCC00895593 /* osaurus.app */;
@@ -238,6 +241,7 @@
 				F0C60D602E53DE140028ED4F /* XCRemoteSwiftPackageReference "mlx-swift" */,
 				F0C60D702E5491A10028ED4F /* XCRemoteSwiftPackageReference "mlx-swift-examples" */,
 				F0D0T1002E55AAAA0028ED4F /* XCRemoteSwiftPackageReference "swift-transformers" */,
+				F06F83442E56B319007CD59B /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F0BB3C272E51FBCC00895593 /* Products */;
@@ -447,6 +451,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
+				INFOPLIST_KEY_SUFeedURL = "$(SU_FEED_URL)";
+				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Osaurus needs access to your microphone to test speech recognition with Whisper.";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -456,6 +463,8 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dinoki.osaurus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SPARKLE_PUBLIC_ED_KEY = REPLACE_WITH_PUBLIC_ED_KEY;
+				SU_FEED_URL = https://dinoki.github.io/osaurus/appcast.xml;
 				REGISTER_APP_GROUPS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -476,6 +485,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
+				INFOPLIST_KEY_SUFeedURL = "$(SU_FEED_URL)";
+				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Osaurus needs access to your microphone to test speech recognition with Whisper.";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -485,6 +497,8 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dinoki.osaurus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SPARKLE_PUBLIC_ED_KEY = REPLACE_WITH_PUBLIC_ED_KEY;
+				SU_FEED_URL = https://dinoki.github.io/osaurus/appcast.xml;
 				REGISTER_APP_GROUPS = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -601,6 +615,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		F06F83442E56B319007CD59B /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.7.1;
+			};
+		};
 		F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/apple/swift-nio.git";
@@ -636,6 +658,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		F06F83452E56B319007CD59B /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F06F83442E56B319007CD59B /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
 		F0BB3C9F2E52234700895593 /* NIO */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */;

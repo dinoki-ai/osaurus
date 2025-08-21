@@ -7,9 +7,11 @@
 
 import SwiftUI
 import AppKit
+import Sparkle
 
 struct ContentView: View {
     @EnvironmentObject var server: ServerController
+    @EnvironmentObject private var updater: UpdaterViewModel
     @StateObject private var themeManager = ThemeManager.shared
     @Environment(\.theme) private var theme
     // Popover customization
@@ -162,6 +164,23 @@ struct ContentView: View {
                         .popover(isPresented: $showModelManager, attachmentAnchor: .point(.bottom), arrowEdge: .top) {
                             ModelDownloadView()
                         }
+
+                        Button(action: { updater.checkForUpdates() }) {
+                            Image(systemName: "arrow.down.circle")
+                                .font(.system(size: 14))
+                                .foregroundColor(theme.primaryText)
+                                .frame(width: 28, height: 28)
+                                .background(
+                                    Circle()
+                                        .fill(theme.buttonBackground)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(theme.buttonBorder, lineWidth: 1)
+                                        )
+                                )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Check for Updates…")
                     }
                 }
             }

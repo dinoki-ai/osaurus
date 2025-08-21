@@ -45,9 +45,7 @@ struct MLXModel: Identifiable, Codable {
     
     /// Local directory where this model should be stored
     var localDirectory: URL {
-        // Build the path using each component of the repository id separately
-        // to avoid percent-encoding of "/" which would create a single
-        // directory like "mlx-community%2FLlama-..." instead of nested dirs.
+        // Build the path using each component of the repository id separately.
         let components = id.split(separator: "/").map(String.init)
         return components.reduce(rootDirectory) { partial, component in
             partial.appendingPathComponent(component, isDirectory: true)

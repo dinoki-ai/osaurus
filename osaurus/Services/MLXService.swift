@@ -181,7 +181,7 @@ class MLXService {
             results.append((name, id))
         }
 
-        // Case 1: nested org/repo directories (current layout)
+        // Nested org/repo directories
         for orgURL in topLevel {
             var isOrgDir: ObjCBool = false
             guard fm.fileExists(atPath: orgURL.path, isDirectory: &isOrgDir), isOrgDir.boolValue else { continue }
@@ -191,19 +191,6 @@ class MLXService {
                 guard fm.fileExists(atPath: repoURL.path, isDirectory: &isRepoDir), isRepoDir.boolValue else { continue }
                 validateAndAppend(org: orgURL.lastPathComponent, repo: repoURL.lastPathComponent, repoURL: repoURL)
             }
-        }
-
-        // Case 2: legacy single-level directories with "%2F" encoded slashes
-        for encodedURL in topLevel {
-            let dirName = encodedURL.lastPathComponent
-            guard dirName.contains("%2F") else { continue }
-            var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: encodedURL.path, isDirectory: &isDir), isDir.boolValue else { continue }
-            let parts = dirName.components(separatedBy: "%2F")
-            guard parts.count == 2 else { continue }
-            let org = parts[0]
-            let repo = parts[1]
-            validateAndAppend(org: org, repo: repo, repoURL: encodedURL)
         }
 
         // De-duplicate while preserving order
@@ -229,14 +216,6 @@ class MLXService {
         if let items = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil),
            hasConfig && items.contains(where: { $0.pathExtension == "safetensors" }) {
             return url
-        }
-        // Legacy encoded folder name
-        let encoded = id.replacingOccurrences(of: "/", with: "%2F")
-        let encodedURL = ModelManager.modelsDirectory.appendingPathComponent(encoded, isDirectory: true)
-        let hasConfig2 = fm.fileExists(atPath: encodedURL.appendingPathComponent("config.json").path)
-        if let items2 = try? fm.contentsOfDirectory(at: encodedURL, includingPropertiesForKeys: nil),
-           hasConfig2 && items2.contains(where: { $0.pathExtension == "safetensors" }) {
-            return encodedURL
         }
         return nil
     }

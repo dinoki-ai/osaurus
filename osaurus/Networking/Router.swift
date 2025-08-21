@@ -35,11 +35,13 @@ public struct Router {
             
         case ("GET", "/models"):
             return modelsEndpoint()
+
         case ("GET", "/v1/models"):
             return modelsEndpoint()
             
         case ("POST", "/chat/completions"):
             return chatCompletionsEndpoint(body: body, context: context, handler: handler)
+
         case ("POST", "/v1/chat/completions"):
             return chatCompletionsEndpoint(body: body, context: context, handler: handler)
             

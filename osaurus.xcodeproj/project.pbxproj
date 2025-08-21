@@ -451,11 +451,11 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Osaurus needs access to your microphone to test speech recognition with Whisper.";
 				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
 				INFOPLIST_KEY_SUFeedURL = "$(SU_FEED_URL)";
 				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Osaurus needs access to your microphone to test speech recognition with Whisper.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -463,9 +463,9 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dinoki.osaurus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SPARKLE_PUBLIC_ED_KEY = REPLACE_WITH_PUBLIC_ED_KEY;
-				SU_FEED_URL = https://dinoki.github.io/osaurus/appcast.xml;
 				REGISTER_APP_GROUPS = YES;
+				SPARKLE_PUBLIC_ED_KEY = REPLACE_WITH_PUBLIC_ED_KEY;
+				SU_FEED_URL = "https://dinoki.github.io/osaurus/appcast.xml";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -485,11 +485,11 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Osaurus needs access to your microphone to test speech recognition with Whisper.";
 				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
 				INFOPLIST_KEY_SUFeedURL = "$(SU_FEED_URL)";
 				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Osaurus needs access to your microphone to test speech recognition with Whisper.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -497,9 +497,9 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dinoki.osaurus;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SPARKLE_PUBLIC_ED_KEY = REPLACE_WITH_PUBLIC_ED_KEY;
-				SU_FEED_URL = https://dinoki.github.io/osaurus/appcast.xml;
 				REGISTER_APP_GROUPS = YES;
+				SPARKLE_PUBLIC_ED_KEY = REPLACE_WITH_PUBLIC_ED_KEY;
+				SU_FEED_URL = "https://dinoki.github.io/osaurus/appcast.xml";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};

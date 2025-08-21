@@ -24,7 +24,13 @@ if [ ! -f "build_output/Osaurus-${VERSION}.dmg" ]; then
     "build_output/Osaurus-${VERSION}.dmg"
 fi
 
-codesign --force --sign "Developer ID Application: ${DEVELOPER_ID_NAME}" \
+# Normalize identity: allow DEVELOPER_ID_NAME with or without the product prefix
+CODE_SIGN_IDENTITY_VALUE="${DEVELOPER_ID_NAME}"
+if [[ "${CODE_SIGN_IDENTITY_VALUE}" != Developer\ ID\ Application:* ]]; then
+  CODE_SIGN_IDENTITY_VALUE="Developer ID Application: ${CODE_SIGN_IDENTITY_VALUE}"
+fi
+
+codesign --force --sign "${CODE_SIGN_IDENTITY_VALUE}" \
   "build_output/Osaurus-${VERSION}.dmg"
 
 cp "build_output/Osaurus-${VERSION}.dmg" "build_output/Osaurus.dmg"

@@ -90,6 +90,70 @@ struct ChatCompletionResponse: Codable {
     let system_fingerprint: String?
 }
 
+// MARK: - Interop API Structures (Ollama-compatible)
+
+struct InteropTagsResponse: Codable {
+    let models: [InteropModelTag]
+}
+
+struct InteropModelTag: Codable {
+    let name: String
+    let model: String
+    let modified_at: String
+    let size: Int
+    let digest: String
+    let details: InteropModelDetails
+}
+
+struct InteropModelDetails: Codable {
+    let parent_model: String
+    let format: String
+    let family: String
+    let families: [String]
+    let parameter_size: String
+    let quantization_level: String
+}
+
+struct InteropShowRequest: Codable {
+    let model: String
+    let verbose: Bool?
+}
+
+struct InteropShowResponse: Codable {
+    let modelfile: String
+    let parameters: String
+    let template: String
+    let details: InteropModelDetails
+    let model_info: [String: JSONValue]?
+    let capabilities: [String]
+}
+
+// MARK: - Ollama Chat / Generate
+
+struct InteropChatMessage: Codable {
+    let role: String
+    let content: String
+}
+
+struct InteropChatRequest: Codable {
+    let model: String
+    let messages: [InteropChatMessage]
+    let stream: Bool?
+}
+
+struct InteropGenerateRequest: Codable {
+    let model: String
+    let prompt: String
+    let stream: Bool?
+}
+
+struct InteropChatResponse: Codable {
+    let model: String
+    let created_at: String
+    let message: InteropChatMessage
+    let done: Bool
+}
+
 // MARK: - Streaming Response Structures
 
 /// Delta content for streaming

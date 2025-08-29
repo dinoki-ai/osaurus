@@ -616,6 +616,138 @@ class AsyncHTTPHandler {
         try await sendJSONResponse(response, status: .ok, context: context)
     }
 
+    // MARK: - Compat-compatible streaming (NDJSON)
+    func handleInteropChat(
+        request: InteropChatRequest,
+        context: ChannelHandlerContext
+    ) async {
+        do {
+            // Resolve model (strip optional tag like :latest)
+            let baseModel: String = request.model.split(separator: ":").first.map(String.init) ?? request.model
+            guard let model = MLXService.findModel(named: baseModel) else {
+                let errObj: [String: String] = ["error": "Model not found: \(request.model)"]
+                try await sendJSONResponse(errObj, status: .notFound, context: context)
+                return
+            }
+
+            // Map messages
+            let messages: [Message] = request.messages.map { msg in
+                let role: MessageRole = {
+                    switch msg.role {
+                    case "system": return .system
+                    case "assistant": return .assistant
+                    default: return .user
+                    }
+                }()
+                return Message(role: role, content: msg.content)
+            }
+
+            let streamEnabled = request.stream ?? true
+            let createdAt = Date().ISO8601Format()
+
+            if streamEnabled {
+                // Prepare NDJSON headers
+                var head = HTTPResponseHead(version: .http1_1, status: .ok)
+                var headers = HTTPHeaders()
+                headers.add(name: "Content-Type", value: "application/x-ndjson")
+                headers.add(name: "Cache-Control", value: "no-cache, no-transform")
+                headers.add(name: "Connection", value: "keep-alive")
+                headers.add(name: "Transfer-Encoding", value: "chunked")
+                head.headers = headers
+
+                executeOnLoop(context.eventLoop) {
+                    context.write(NIOAny(HTTPServerResponsePart.head(head)), promise: nil)
+                    context.flush()
+                }
+
+                // Stream tokens
+                let eventStream = try await MLXService.shared.generateEvents(
+                    messages: messages,
+                    model: model,
+                    temperature: 0.7,
+                    maxTokens: 2048,
+                    tools: nil,
+                    toolChoice: nil,
+                    sessionId: nil
+                )
+
+                for await event in eventStream {
+                    guard let token = event.chunk else { continue }
+                    let chunk = InteropChatResponse(
+                        model: baseModel,
+                        created_at: createdAt,
+                        message: InteropChatMessage(role: "assistant", content: token),
+                        done: false
+                    )
+                    executeOnLoop(context.eventLoop) {
+                        let encoder = IkigaJSONEncoder()
+                        var buffer = context.channel.allocator.buffer(capacity: 256)
+                        do { try encoder.encodeAndWrite(chunk, into: &buffer) } catch {}
+                        buffer.writeString("\n")
+                        context.write(NIOAny(HTTPServerResponsePart.body(.byteBuffer(buffer))), promise: nil)
+                        context.flush()
+                    }
+                }
+
+                // Final message
+                let final = InteropChatResponse(
+                    model: baseModel,
+                    created_at: createdAt,
+                    message: InteropChatMessage(role: "assistant", content: ""),
+                    done: true
+                )
+                executeOnLoop(context.eventLoop) {
+                    let encoder = IkigaJSONEncoder()
+                    var buffer = context.channel.allocator.buffer(capacity: 256)
+                    do { try encoder.encodeAndWrite(final, into: &buffer) } catch {}
+                    buffer.writeString("\n")
+                    context.write(NIOAny(HTTPServerResponsePart.body(.byteBuffer(buffer))), promise: nil)
+                    context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil as HTTPHeaders?))).whenComplete { _ in
+                        context.close(promise: nil)
+                    }
+                }
+                return
+            }
+
+            // Non-streaming: accumulate full response
+            let eventStream = try await MLXService.shared.generateEvents(
+                messages: messages,
+                model: model,
+                temperature: 0.7,
+                maxTokens: 2048,
+                tools: nil,
+                toolChoice: nil,
+                sessionId: nil
+            )
+            var segments: [String] = []
+            for await event in eventStream { if let token = event.chunk { segments.append(token) } }
+            let full = segments.joined()
+            let resp = InteropChatResponse(
+                model: baseModel,
+                created_at: createdAt,
+                message: InteropChatMessage(role: "assistant", content: full),
+                done: true
+            )
+            try await sendJSONResponse(resp, status: .ok, context: context)
+        } catch {
+            let errObj: [String: String] = ["error": error.localizedDescription]
+            try? await sendJSONResponse(errObj, status: .internalServerError, context: context)
+        }
+    }
+
+    func handleInteropGenerate(
+        request: InteropGenerateRequest,
+        context: ChannelHandlerContext
+    ) async {
+        // Map to a single user message and reuse chat path
+        let chatReq = InteropChatRequest(
+            model: request.model,
+            messages: [InteropChatMessage(role: "user", content: request.prompt)],
+            stream: request.stream
+        )
+        await handleInteropChat(request: chatReq, context: context)
+    }
+
     // Tool Call Parsing moved to ToolCallParser
     
     private func sendJSONResponse<T: Encodable>(

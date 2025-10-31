@@ -73,7 +73,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     if response.actionIdentifier == actionOpenId
       || response.actionIdentifier == UNNotificationDefaultActionIdentifier
     {
-      DispatchQueue.main.async {
+      Task { @MainActor in
         AppDelegate.shared?.showModelManagerWindow(deeplinkModelId: modelId, file: nil)
       }
     }

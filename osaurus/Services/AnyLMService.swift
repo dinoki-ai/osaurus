@@ -8,7 +8,7 @@
 import Foundation
 
 #if canImport(AnyLanguageModel)
-import AnyLanguageModel
+  import AnyLanguageModel
 #endif
 
 enum AnyLMServiceError: Error {
@@ -51,8 +51,12 @@ final class AnyLMService: ToolCapableService {
   func handles(requestedModel: String?) -> Bool {
     let trimmed = (requestedModel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty { return Self.isFoundationAvailable() }
-    if trimmed.caseInsensitiveCompare("default") == .orderedSame { return Self.isFoundationAvailable() }
-    if trimmed.caseInsensitiveCompare("foundation") == .orderedSame { return Self.isFoundationAvailable() }
+    if trimmed.caseInsensitiveCompare("default") == .orderedSame {
+      return Self.isFoundationAvailable()
+    }
+    if trimmed.caseInsensitiveCompare("foundation") == .orderedSame {
+      return Self.isFoundationAvailable()
+    }
     if LocalMLXModels.modelId(forName: trimmed) != nil { return true }
     if trimmed.contains("/") { return true }
     return false
@@ -325,7 +329,8 @@ final class AnyLMService: ToolCapableService {
       description: String?
     ) -> GenerationSchema {
       guard let parameters else {
-        return GenerationSchema(type: GeneratedContent.self, description: description, properties: [])
+        return GenerationSchema(
+          type: GeneratedContent.self, description: description, properties: [])
       }
       if let root = dynamicSchema(from: parameters, name: toolName) {
         if let schema = try? GenerationSchema(root: root, dependencies: []) {
@@ -378,8 +383,8 @@ final class AnyLMService: ToolCapableService {
           if let items = dict["items"],
             let itemSchema = dynamicSchema(from: items, name: name + "Item")
           {
-            let minItems = jsonIntOrNil(dict["minItems"]) 
-            let maxItems = jsonIntOrNil(dict["maxItems"]) 
+            let minItems = jsonIntOrNil(dict["minItems"])
+            let maxItems = jsonIntOrNil(dict["maxItems"])
             return DynamicGenerationSchema(
               arrayOf: itemSchema, minimumElements: minItems, maximumElements: maxItems)
           }
@@ -457,5 +462,3 @@ final class AnyLMService: ToolCapableService {
     }
   #endif
 }
-
-

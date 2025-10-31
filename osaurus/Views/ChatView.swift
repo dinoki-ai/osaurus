@@ -76,7 +76,8 @@ final class ChatSession: ObservableObject {
       guard service.handles(requestedModel: selectedModel) else {
         turns.append(
           ChatTurn(
-            role: .assistant, content: "No compatible model available. Open Model Manager to download one."))
+            role: .assistant,
+            content: "No compatible model available. Open Model Manager to download one."))
         return
       }
       let assistantTurn = ChatTurn(role: .assistant, content: "")
@@ -687,7 +688,7 @@ struct WindowAccessor: NSViewRepresentable {
 
   func makeNSView(context: Context) -> NSView {
     let view = NSView()
-    DispatchQueue.main.async {
+    Task { @MainActor in
       self.window = view.window
     }
     return view
@@ -695,7 +696,7 @@ struct WindowAccessor: NSViewRepresentable {
 
   func updateNSView(_ nsView: NSView, context: Context) {
     if window == nil {
-      DispatchQueue.main.async {
+      Task { @MainActor in
         self.window = nsView.window
       }
     }

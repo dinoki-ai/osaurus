@@ -8,7 +8,7 @@
 import Foundation
 
 /// Represents an MLX-compatible LLM that can be downloaded and used
-struct MLXModel: Identifiable, Codable {
+struct MLXModel: Identifiable, Codable, Sendable {
   let id: String
   let name: String
   let description: String
@@ -89,7 +89,7 @@ struct MLXModel: Identifiable, Codable {
 }
 
 /// Download state for tracking progress
-enum DownloadState: Equatable {
+enum DownloadState: Equatable, Sendable {
   case notStarted
   case downloading(progress: Double)
   case completed

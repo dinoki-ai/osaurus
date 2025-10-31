@@ -44,8 +44,9 @@ final class ServerController: ObservableObject {
   private var serverChannel: Channel?
 
   // Singleton holder to allow async access to the current controller instance when injected as EnvironmentObject
-  private struct ServerControllerHolder {
-    static var shared = ServerControllerHolder()
+  @MainActor
+  private final class ServerControllerHolder {
+    static let shared = ServerControllerHolder()
     weak var controller: ServerController?
     private init() {}
   }
@@ -192,8 +193,10 @@ final class ServerController: ObservableObject {
   init() {
     ServerControllerHolder.shared.controller = self
     // Load persisted configuration if available
-    if let saved = ServerConfigurationStore.load() {
-      self.configuration = saved
+    Task { @MainActor in
+      if let saved = await ServerConfigurationStoreActor.shared.load() {
+        self.configuration = saved
+      }
     }
   }
 
@@ -213,7 +216,10 @@ final class ServerController: ObservableObject {
 
   /// Saves the current configuration to disk
   func saveConfiguration() {
-    ServerConfigurationStore.save(configuration)
+    let cfg = configuration
+    Task.detached(priority: .utility) {
+      await ServerConfigurationStoreActor.shared.save(cfg)
+    }
   }
 
   // MARK: - Private Helpers
@@ -387,8 +393,8 @@ final class ServerController: ObservableObject {
             ptr.pointee.ifa_addr, socklen_t(addr.sa_len), &hostname, socklen_t(hostname.count), nil,
             socklen_t(0), NI_NUMERICHOST) == 0
           {
-            let ip = String(cString: hostname)
-            let name = String(cString: ptr.pointee.ifa_name)
+            let ip = decodeCString(hostname, maxLen: Int(NI_MAXHOST))
+            let name = decodeCString(ptr.pointee.ifa_name, maxLen: Int(IFNAMSIZ))
             if name.starts(with: "en") {  // en0, en1, etc. are common for Wi-Fi/Ethernet on macOS
               address = ip
               break
@@ -401,6 +407,14 @@ final class ServerController: ObservableObject {
 
     freeifaddrs(ifaddr)
     return address
+  }
+
+  private func decodeCString(_ ptr: UnsafePointer<CChar>, maxLen: Int) -> String {
+    let length = Int(strnlen(ptr, maxLen))
+    if length == 0 { return "" }
+    let raw = UnsafeRawPointer(ptr).assumingMemoryBound(to: UInt8.self)
+    let buffer = UnsafeBufferPointer(start: raw, count: length)
+    return String(decoding: buffer, as: UTF8.self)
   }
 
   private func cleanupRuntime() async {

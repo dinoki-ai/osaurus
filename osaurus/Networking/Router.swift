@@ -10,6 +10,9 @@ import IkigaJSON
 import NIOCore
 import NIOHTTP1
 
+// Box a non-Sendable reference to cross detached task boundaries safely
+private struct UncheckedSendableBox<T>: @unchecked Sendable { let value: T }
+
 /// Simple routing logic for HTTP requests
 public struct Router {
   /// Channel context for async operations (set by HTTPHandler)
@@ -201,10 +204,12 @@ public struct Router {
     // Use detached task to avoid actor context propagation overhead
     // Capture CORS headers on the event loop thread to avoid cross-thread access to handler
     let corsHeaders = handler?.currentCORSHeaders
+    let ctxBox = UncheckedSendableBox(value: context)
     Task.detached(priority: .userInitiated) {
+      let ctx = ctxBox.value
       await AsyncHTTPHandler.shared.handleChatCompletion(
         request: request,
-        context: context,
+        context: ctx,
         extraHeaders: corsHeaders
       )
     }
@@ -229,10 +234,12 @@ public struct Router {
     }
 
     let corsHeaders = handler?.currentCORSHeaders
+    let ctxBox = UncheckedSendableBox(value: context)
     Task.detached(priority: .userInitiated) {
+      let ctx = ctxBox.value
       await AsyncHTTPHandler.shared.handleChatCompletion(
         request: request,
-        context: context,
+        context: ctx,
         extraHeaders: corsHeaders
       )
     }
@@ -254,10 +261,12 @@ public struct Router {
     }
 
     let corsHeaders = handler?.currentCORSHeaders
+    let ctxBox = UncheckedSendableBox(value: context)
     Task.detached(priority: .userInitiated) {
+      let ctx = ctxBox.value
       await AsyncHTTPHandler.shared.handleChat(
         request: request,
-        context: context,
+        context: ctx,
         extraHeaders: corsHeaders
       )
     }
@@ -279,10 +288,12 @@ public struct Router {
     }
 
     let corsHeaders = handler?.currentCORSHeaders
+    let ctxBox = UncheckedSendableBox(value: context)
     Task.detached(priority: .userInitiated) {
+      let ctx = ctxBox.value
       await AsyncHTTPHandler.shared.handleChat(
         request: request,
-        context: context,
+        context: ctx,
         extraHeaders: corsHeaders
       )
     }

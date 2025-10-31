@@ -16,7 +16,7 @@ final class UpdaterViewModel: NSObject, ObservableObject, SPUUpdaterDelegate {
     super.init()
   }
 
-  func checkForUpdates() {
+  @MainActor func checkForUpdates() {
     updaterController.checkForUpdates(nil)
   }
 

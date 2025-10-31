@@ -156,7 +156,8 @@ final class SSEResponseWriter: ResponseWriter {
     tail.writeString("data: [DONE]\n\n")
     context.write(NIOAny(HTTPServerResponsePart.body(.byteBuffer(tail))), promise: nil)
     let ctxBox = UncheckedSendableBox(value: context)
-    context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil as HTTPHeaders?))).whenComplete { _ in
+    context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil as HTTPHeaders?))).whenComplete {
+      _ in
       let context = ctxBox.value
       context.close(promise: nil)
     }
@@ -242,7 +243,8 @@ final class NDJSONResponseWriter: ResponseWriter {
 
   func writeEnd(_ context: ChannelHandlerContext) {
     let ctxBox = UncheckedSendableBox(value: context)
-    context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil as HTTPHeaders?))).whenComplete { _ in
+    context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil as HTTPHeaders?))).whenComplete {
+      _ in
       let context = ctxBox.value
       context.close(promise: nil)
     }

@@ -10,8 +10,11 @@ import NIOCore
 import NIOHTTP1
 import NIOPosix
 
+// Box non-Sendable references for use in @Sendable closures
+private struct UncheckedSendableBox<T>: @unchecked Sendable { let value: T }
+
 /// SwiftNIO HTTP request handler
-final class HTTPHandler: ChannelInboundHandler {
+final class HTTPHandler: ChannelInboundHandler, @unchecked Sendable {
   typealias InboundIn = HTTPServerRequestPart
   typealias OutboundOut = HTTPServerResponsePart
 
@@ -143,8 +146,10 @@ final class HTTPHandler: ChannelInboundHandler {
     // Send response
     context.write(self.wrapOutboundOut(.head(responseHead)), promise: nil)
     context.write(self.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: nil)
+    let ctxBox = UncheckedSendableBox(value: context)
     context.writeAndFlush(self.wrapOutboundOut(.end(nil))).whenComplete { _ in
-      context.close(promise: nil)
+      let ctx = ctxBox.value
+      ctx.close(promise: nil)
     }
   }
 

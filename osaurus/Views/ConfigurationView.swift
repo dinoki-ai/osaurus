@@ -433,8 +433,11 @@ struct ConfigurationView: View {
                 .filter { !$0.isEmpty }
               configuration.allowedOrigins = parsedOrigins
 
-              // Persist to disk
-              ServerConfigurationStore.save(configuration)
+              // Persist to disk (off the main actor)
+              let cfgToSave = configuration
+              Task.detached(priority: .utility) {
+                await ServerConfigurationStoreActor.shared.save(cfgToSave)
+              }
               // Save Chat configuration
               let chatCfg = ChatConfiguration(
                 hotkey: tempChatHotkey, systemPrompt: tempSystemPrompt)

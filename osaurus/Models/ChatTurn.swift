@@ -8,6 +8,7 @@
 import Combine
 import Foundation
 
+@MainActor
 final class ChatTurn: ObservableObject, Identifiable {
   let id = UUID()
   let role: MessageRole

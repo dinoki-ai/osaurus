@@ -233,7 +233,9 @@ private struct BottomActionBar: View {
         }
 
         CircularIconButton(systemName: "arrow.up.circle", help: "Check for Updates…") {
-          updater.checkForUpdates()
+          Task { @MainActor in
+            updater.checkForUpdates()
+          }
         }
 
         CircularIconButton(systemName: "questionmark.circle", help: "Documentation") {

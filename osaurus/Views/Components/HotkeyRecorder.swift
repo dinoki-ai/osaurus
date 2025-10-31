@@ -241,11 +241,13 @@ private struct RecordingCatcher: NSViewRepresentable {
     }
   }
 
+  @MainActor
   final class EventCatcherView: NSView {
     var onCapture: ((NSEvent) -> Void)?
     var isRecording: Bool = false
-    private var localToken: Any?
-    private var globalToken: Any?
+    private struct MonitorToken: @unchecked Sendable { let value: Any }
+    private var localToken: MonitorToken?
+    private var globalToken: MonitorToken?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -253,32 +255,42 @@ private struct RecordingCatcher: NSViewRepresentable {
       if isRecording {
         if window != nil { window?.makeFirstResponder(self) }
         if localToken == nil {
-          localToken = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self else { return event }
-            self.onCapture?(event)
-            return nil
+          if let token = NSEvent.addLocalMonitorForEvents(
+            matching: .keyDown,
+            handler: { [weak self] event in
+              guard let self else { return event }
+              self.onCapture?(event)
+              return nil
+            }
+          ) {
+            localToken = MonitorToken(value: token)
           }
         }
         if globalToken == nil {
-          globalToken = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.onCapture?(event)
+          if let token = NSEvent.addGlobalMonitorForEvents(
+            matching: .keyDown,
+            handler: { [weak self] event in
+              self?.onCapture?(event)
+            }
+          ) {
+            globalToken = MonitorToken(value: token)
           }
         }
       } else {
         if let t = localToken {
-          NSEvent.removeMonitor(t)
+          NSEvent.removeMonitor(t.value)
           localToken = nil
         }
         if let t = globalToken {
-          NSEvent.removeMonitor(t)
+          NSEvent.removeMonitor(t.value)
           globalToken = nil
         }
       }
     }
 
     deinit {
-      if let t = localToken { NSEvent.removeMonitor(t) }
-      if let t = globalToken { NSEvent.removeMonitor(t) }
+      if let t = localToken { NSEvent.removeMonitor(t.value) }
+      if let t = globalToken { NSEvent.removeMonitor(t.value) }
     }
   }
 }

@@ -140,7 +140,8 @@ final class AsyncHTTPHandler: @unchecked Sendable {
           return (
             .serviceUnavailable,
             "Requested model provider is not available on this system.",
-            "model")
+            "model"
+          )
         }
       }()
       let errorResponse = OpenAIError(
@@ -577,7 +578,8 @@ final class AsyncHTTPHandler: @unchecked Sendable {
       responseHead.headers = headers
       context.write(NIOAny(HTTPServerResponsePart.head(responseHead)), promise: nil)
       context.write(NIOAny(HTTPServerResponsePart.body(.byteBuffer(buffer))), promise: nil)
-      context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil as HTTPHeaders?))).whenComplete { _ in
+      context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil as HTTPHeaders?))).whenComplete {
+        _ in
         let context = ctxBox.value
         context.close(promise: nil)
       }

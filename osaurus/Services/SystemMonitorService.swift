@@ -30,7 +30,9 @@ final class SystemMonitorService: ObservableObject {
     updateResourceUsage()
 
     // Update every 2 seconds to avoid excessive CPU usage
-    timer = Timer.scheduledTimer(timeInterval: 2.0, target: self, selector: #selector(updateResourceUsage), userInfo: nil, repeats: true)
+    timer = Timer.scheduledTimer(
+      timeInterval: 2.0, target: self, selector: #selector(updateResourceUsage), userInfo: nil,
+      repeats: true)
   }
 
   func stopMonitoring() {

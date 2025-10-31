@@ -309,7 +309,7 @@ extension AppDelegate {
     }
 
     // Apply defaults if not provided
-    let targetPort = desiredPort ?? (ServerConfigurationStore.load()?.port ?? 1337)
+    let targetPort = desiredPort ?? serverController.configuration.port
     guard (1..<65536).contains(targetPort) else { return }
 
     // Apply exposure policy based on request (default localhost-only)
@@ -436,7 +436,7 @@ extension AppDelegate {
       controller.view.layoutSubtreeIfNeeded()
       NSApp.activate(ignoringOtherApps: true)
       chatWindow?.makeKeyAndOrderFront(nil)
-      DispatchQueue.main.async {
+      Task { @MainActor in
         NotificationCenter.default.post(name: .chatOverlayActivated, object: nil)
       }
       return
@@ -447,7 +447,7 @@ extension AppDelegate {
     if win.isMiniaturized { win.deminiaturize(nil) }
     centerWindowOnActiveScreen(win)
     win.makeKeyAndOrderFront(nil)
-    DispatchQueue.main.async {
+    Task { @MainActor in
       NotificationCenter.default.post(name: .chatOverlayActivated, object: nil)
     }
   }
@@ -537,7 +537,8 @@ extension AppDelegate {
     // If popover is open, close first, then present shortly after to avoid layout recursion
     if let pop = popover, pop.isShown {
       pop.performClose(nil)
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+      Task { @MainActor in
+        try? await Task.sleep(nanoseconds: 200_000_000)
         presentWindow()
       }
     } else {

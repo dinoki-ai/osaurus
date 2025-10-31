@@ -18,7 +18,9 @@ enum LocalMLXModels {
     if let match = pairs.first(where: { pair in
       let repo = pair.id.split(separator: "/").last.map(String.init)?.lowercased()
       return repo == name.lowercased()
-    }) { return match.id }
+    }) {
+      return match.id
+    }
     if let match = pairs.first(where: { $0.id.lowercased() == name.lowercased() }) {
       return match.id
     }
@@ -43,9 +45,11 @@ enum LocalMLXModels {
     func validateAndAppend(org: String, repo: String, repoURL: URL) {
       guard exists("config.json", at: repoURL) else { return }
       let hasTokenizerJSON = exists("tokenizer.json", at: repoURL)
-      let hasBPE = exists("merges.txt", at: repoURL)
+      let hasBPE =
+        exists("merges.txt", at: repoURL)
         && (exists("vocab.json", at: repoURL) || exists("vocab.txt", at: repoURL))
-      let hasSentencePiece = exists("tokenizer.model", at: repoURL) || exists("spiece.model", at: repoURL)
+      let hasSentencePiece =
+        exists("tokenizer.model", at: repoURL) || exists("spiece.model", at: repoURL)
       let hasTokenizerAssets = hasTokenizerJSON || hasBPE || hasSentencePiece
       guard hasTokenizerAssets else { return }
       guard let items = try? fm.contentsOfDirectory(at: repoURL, includingPropertiesForKeys: nil),
@@ -67,10 +71,12 @@ enum LocalMLXModels {
       else { continue }
       for repoURL in repos {
         var isRepoDir: ObjCBool = false
-        guard fm.fileExists(atPath: repoURL.path, isDirectory: &isRepoDir), isRepoDir.boolValue else {
+        guard fm.fileExists(atPath: repoURL.path, isDirectory: &isRepoDir), isRepoDir.boolValue
+        else {
           continue
         }
-        validateAndAppend(org: orgURL.lastPathComponent, repo: repoURL.lastPathComponent, repoURL: repoURL)
+        validateAndAppend(
+          org: orgURL.lastPathComponent, repo: repoURL.lastPathComponent, repoURL: repoURL)
       }
     }
 
@@ -161,5 +167,3 @@ enum LocalMLXModels {
     return newDefault
   }
 }
-
-

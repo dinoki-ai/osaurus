@@ -1,27 +1,39 @@
 //
-//  FoundationModelService.swift
+//  AnyLMService.swift
 //  osaurus
 //
-//  Created by Terence on 10/14/25.
+//  Unified model service backed by AnyLanguageModel (Foundation + MLX)
 //
 
 import Foundation
 
-#if canImport(FoundationModels)
-  import FoundationModels
+#if canImport(AnyLanguageModel)
+import AnyLanguageModel
 #endif
 
-enum FoundationModelServiceError: Error {
+enum AnyLMServiceError: Error {
   case notAvailable
-  case generationFailed
+  case invalidModel(String)
 }
 
-final class FoundationModelService: ToolCapableService {
-  let id: String = "foundation"
+extension AnyLMServiceError: LocalizedError {
+  var errorDescription: String? {
+    switch self {
+    case .notAvailable:
+      return "Requested model provider is not available on this system."
+    case .invalidModel(let name):
+      return "Unknown or unsupported model: \(name)."
+    }
+  }
+}
 
-  /// Returns true if the system default language model is available on this device/OS.
-  static func isDefaultModelAvailable() -> Bool {
-    #if canImport(FoundationModels)
+final class AnyLMService: ToolCapableService {
+  let id: String = "anylm"
+
+  // MARK: - Availability & Model Handling
+
+  static func isFoundationAvailable() -> Bool {
+    #if canImport(AnyLanguageModel)
       if #available(macOS 26.0, *) {
         return SystemLanguageModel.default.isAvailable
       } else {
@@ -32,54 +44,37 @@ final class FoundationModelService: ToolCapableService {
     #endif
   }
 
-  func isAvailable() -> Bool { Self.isDefaultModelAvailable() }
+  func isAvailable() -> Bool {
+    return Self.isFoundationAvailable() || !LocalMLXModels.getAvailableModels().isEmpty
+  }
 
   func handles(requestedModel: String?) -> Bool {
-    let t = (requestedModel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    return t.isEmpty || t.caseInsensitiveCompare("default") == .orderedSame
-      || t.caseInsensitiveCompare("foundation") == .orderedSame
+    let trimmed = (requestedModel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty { return Self.isFoundationAvailable() }
+    if trimmed.caseInsensitiveCompare("default") == .orderedSame { return Self.isFoundationAvailable() }
+    if trimmed.caseInsensitiveCompare("foundation") == .orderedSame { return Self.isFoundationAvailable() }
+    if LocalMLXModels.modelId(forName: trimmed) != nil { return true }
+    if trimmed.contains("/") { return true }
+    return false
   }
 
-  /// Generate a single response from the system default language model.
-  /// Falls back to throwing when the framework is unavailable.
-  static func generateOneShot(
-    prompt: String,
-    temperature: Float,
-    maxTokens: Int
-  ) async throws -> String {
-    #if canImport(FoundationModels)
-      if #available(macOS 26.0, *) {
-        let session = LanguageModelSession()
-
-        let options = GenerationOptions(
-          sampling: nil,
-          temperature: Double(temperature),
-          maximumResponseTokens: maxTokens
-        )
-        let response = try await session.respond(to: prompt, options: options)
-        return response.content
-      } else {
-        throw FoundationModelServiceError.notAvailable
-      }
-    #else
-      throw FoundationModelServiceError.notAvailable
-    #endif
-  }
+  // MARK: - ModelService
 
   func streamDeltas(
     prompt: String,
     parameters: GenerationParameters,
     requestedModel: String?
   ) async throws -> AsyncStream<String> {
-    #if canImport(FoundationModels)
+    #if canImport(AnyLanguageModel)
       if #available(macOS 26.0, *) {
-        let session = LanguageModelSession()
-
+        let model = try resolveModel(requestedModel)
         let options = GenerationOptions(
           sampling: nil,
           temperature: Double(parameters.temperature),
           maximumResponseTokens: parameters.maxTokens
         )
+
+        let session = LanguageModelSession(model: model)
         let stream = session.streamResponse(to: prompt, options: options)
 
         return AsyncStream<String> { continuation in
@@ -100,7 +95,6 @@ final class FoundationModelService: ToolCapableService {
                 previous = current
               }
             } catch {
-              // Surface stream error as an out-of-band message for the HTTP layer to convert to an error
               let prefix = "__OS_ERROR__:"
               continuation.yield(prefix + error.localizedDescription)
             }
@@ -108,10 +102,10 @@ final class FoundationModelService: ToolCapableService {
           }
         }
       } else {
-        throw FoundationModelServiceError.notAvailable
+        throw AnyLMServiceError.notAvailable
       }
     #else
-      throw FoundationModelServiceError.notAvailable
+      throw AnyLMServiceError.notAvailable
     #endif
   }
 
@@ -120,11 +114,26 @@ final class FoundationModelService: ToolCapableService {
     parameters: GenerationParameters,
     requestedModel: String?
   ) async throws -> String {
-    return try await Self.generateOneShot(
-      prompt: prompt, temperature: parameters.temperature, maxTokens: parameters.maxTokens)
+    #if canImport(AnyLanguageModel)
+      if #available(macOS 26.0, *) {
+        let model = try resolveModel(requestedModel)
+        let options = GenerationOptions(
+          sampling: nil,
+          temperature: Double(parameters.temperature),
+          maximumResponseTokens: parameters.maxTokens
+        )
+        let session = LanguageModelSession(model: model)
+        let response = try await session.respond(to: prompt, options: options)
+        return response.content
+      } else {
+        throw AnyLMServiceError.notAvailable
+      }
+    #else
+      throw AnyLMServiceError.notAvailable
+    #endif
   }
 
-  // MARK: - Tool calling bridge (OpenAI tools -> FoundationModels)
+  // MARK: - ToolCapableService
 
   func respondWithTools(
     prompt: String,
@@ -134,12 +143,12 @@ final class FoundationModelService: ToolCapableService {
     toolChoice: ToolChoiceOption?,
     requestedModel: String?
   ) async throws -> String {
-    #if canImport(FoundationModels)
+    #if canImport(AnyLanguageModel)
       if #available(macOS 26.0, *) {
-        let appleTools: [any FoundationModels.Tool] =
+        let amlTools: [any AnyLanguageModel.Tool] =
           tools
           .filter { self.shouldEnableTool($0, choice: toolChoice) }
-          .map { self.toAppleTool($0) }
+          .map { self.toAnyLMTool($0) }
 
         let options = GenerationOptions(
           sampling: nil,
@@ -148,7 +157,8 @@ final class FoundationModelService: ToolCapableService {
         )
 
         do {
-          let session = LanguageModelSession(model: .default, tools: appleTools, instructions: nil)
+          let model = try resolveModel(requestedModel)
+          let session = LanguageModelSession(model: model, tools: amlTools, instructions: nil)
           let response = try await session.respond(to: prompt, options: options)
           var reply = response.content
           if !stopSequences.isEmpty {
@@ -162,16 +172,15 @@ final class FoundationModelService: ToolCapableService {
           return reply
         } catch let error as LanguageModelSession.ToolCallError {
           if let inv = error.underlyingError as? ToolInvocationError {
-            // Re-throw using shared ServiceToolInvocation so callers don't need Foundation type
             throw ServiceToolInvocation(toolName: inv.toolName, jsonArguments: inv.jsonArguments)
           }
           throw error
         }
       } else {
-        throw FoundationModelServiceError.notAvailable
+        throw AnyLMServiceError.notAvailable
       }
     #else
-      throw FoundationModelServiceError.notAvailable
+      throw AnyLMServiceError.notAvailable
     #endif
   }
 
@@ -183,12 +192,12 @@ final class FoundationModelService: ToolCapableService {
     toolChoice: ToolChoiceOption?,
     requestedModel: String?
   ) async throws -> AsyncThrowingStream<String, Error> {
-    #if canImport(FoundationModels)
+    #if canImport(AnyLanguageModel)
       if #available(macOS 26.0, *) {
-        let appleTools: [any FoundationModels.Tool] =
+        let amlTools: [any AnyLanguageModel.Tool] =
           tools
           .filter { self.shouldEnableTool($0, choice: toolChoice) }
-          .map { self.toAppleTool($0) }
+          .map { self.toAnyLMTool($0) }
 
         let options = GenerationOptions(
           sampling: nil,
@@ -196,7 +205,8 @@ final class FoundationModelService: ToolCapableService {
           maximumResponseTokens: parameters.maxTokens
         )
 
-        let session = LanguageModelSession(model: .default, tools: appleTools, instructions: nil)
+        let model = try resolveModel(requestedModel)
+        let session = LanguageModelSession(model: model, tools: amlTools, instructions: nil)
         let stream = session.streamResponse(to: prompt, options: options)
 
         return AsyncThrowingStream<String, Error> { continuation in
@@ -225,7 +235,6 @@ final class FoundationModelService: ToolCapableService {
               continuation.finish()
             } catch let error as LanguageModelSession.ToolCallError {
               if let inv = error.underlyingError as? ToolInvocationError {
-                // Surface as shared ServiceToolInvocation
                 continuation.finish(
                   throwing: ServiceToolInvocation(
                     toolName: inv.toolName, jsonArguments: inv.jsonArguments)
@@ -239,16 +248,45 @@ final class FoundationModelService: ToolCapableService {
           }
         }
       } else {
-        throw FoundationModelServiceError.notAvailable
+        throw AnyLMServiceError.notAvailable
       }
     #else
-      throw FoundationModelServiceError.notAvailable
+      throw AnyLMServiceError.notAvailable
     #endif
   }
 
   // MARK: - Private helpers
 
-  #if canImport(FoundationModels)
+  #if canImport(AnyLanguageModel)
+    @available(macOS 26.0, *)
+    private func resolveModel(_ requestedModel: String?) throws -> any LanguageModel {
+      let trimmed = (requestedModel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      if trimmed.isEmpty || trimmed.caseInsensitiveCompare("default") == .orderedSame
+        || trimmed.caseInsensitiveCompare("foundation") == .orderedSame
+      {
+        guard Self.isFoundationAvailable() else { throw AnyLMServiceError.notAvailable }
+        return SystemLanguageModel.default
+      }
+
+      if let id = LocalMLXModels.modelId(forName: trimmed) {
+        #if AML_WITH_MLX
+          return MLXLanguageModel(modelId: id)
+        #else
+          throw AnyLMServiceError.notAvailable
+        #endif
+      }
+
+      if trimmed.contains("/") {
+        #if AML_WITH_MLX
+          return MLXLanguageModel(modelId: trimmed)
+        #else
+          throw AnyLMServiceError.notAvailable
+        #endif
+      }
+
+      throw AnyLMServiceError.invalidModel(trimmed)
+    }
+
     @available(macOS 26.0, *)
     private struct ToolInvocationError: Error {
       let toolName: String
@@ -256,7 +294,7 @@ final class FoundationModelService: ToolCapableService {
     }
 
     @available(macOS 26.0, *)
-    private struct OpenAIToolAdapter: FoundationModels.Tool {
+    private struct OpenAIToolAdapter: AnyLanguageModel.Tool {
       typealias Output = String
       typealias Arguments = GeneratedContent
 
@@ -266,21 +304,20 @@ final class FoundationModelService: ToolCapableService {
       var includesSchemaInInstructions: Bool { true }
 
       func call(arguments: GeneratedContent) async throws -> String {
-        // Serialize arguments as JSON and throw to signal a tool call back to the server
         let json = arguments.jsonString
         throw ToolInvocationError(toolName: name, jsonArguments: json)
       }
     }
 
     @available(macOS 26.0, *)
-    private func toAppleTool(_ tool: Tool) -> any FoundationModels.Tool {
+    private func toAnyLMTool(_ tool: Tool) -> any AnyLanguageModel.Tool {
       let desc = tool.function.description ?? ""
       let schema: GenerationSchema = makeGenerationSchema(
         from: tool.function.parameters, toolName: tool.function.name, description: desc)
       return OpenAIToolAdapter(name: tool.function.name, description: desc, parameters: schema)
     }
 
-    // Convert OpenAI JSON Schema (as JSONValue) to FoundationModels GenerationSchema
+    // Convert OpenAI JSON Schema (as JSONValue) to AnyLanguageModel GenerationSchema
     @available(macOS 26.0, *)
     private func makeGenerationSchema(
       from parameters: JSONValue?,
@@ -288,8 +325,7 @@ final class FoundationModelService: ToolCapableService {
       description: String?
     ) -> GenerationSchema {
       guard let parameters else {
-        return GenerationSchema(
-          type: GeneratedContent.self, description: description, properties: [])
+        return GenerationSchema(type: GeneratedContent.self, description: description, properties: [])
       }
       if let root = dynamicSchema(from: parameters, name: toolName) {
         if let schema = try? GenerationSchema(root: root, dependencies: []) {
@@ -304,7 +340,6 @@ final class FoundationModelService: ToolCapableService {
     private func dynamicSchema(from json: JSONValue, name: String) -> DynamicGenerationSchema? {
       switch json {
       case .object(let dict):
-        // enum of strings
         if case .array(let enumVals)? = dict["enum"],
           case .string = enumVals.first
         {
@@ -315,13 +350,11 @@ final class FoundationModelService: ToolCapableService {
             name: name, description: jsonStringOrNil(dict["description"]), anyOf: choices)
         }
 
-        // type can be string or array
         var typeString: String? = nil
         if let t = dict["type"] {
           switch t {
           case .string(let s): typeString = s
           case .array(let arr):
-            // Prefer first non-null type
             typeString =
               arr.compactMap { v in
                 if case .string(let s) = v, s != "null" { return s } else { return nil }
@@ -345,18 +378,16 @@ final class FoundationModelService: ToolCapableService {
           if let items = dict["items"],
             let itemSchema = dynamicSchema(from: items, name: name + "Item")
           {
-            let minItems = jsonIntOrNil(dict["minItems"])
-            let maxItems = jsonIntOrNil(dict["maxItems"])
+            let minItems = jsonIntOrNil(dict["minItems"]) 
+            let maxItems = jsonIntOrNil(dict["maxItems"]) 
             return DynamicGenerationSchema(
               arrayOf: itemSchema, minimumElements: minItems, maximumElements: maxItems)
           }
-          // Fallback to array of strings
           return DynamicGenerationSchema(
             arrayOf: DynamicGenerationSchema(type: String.self), minimumElements: nil,
             maximumElements: nil)
         case "object": fallthrough
         default:
-          // Build object properties
           var required: Set<String> = []
           if case .array(let reqArr)? = dict["required"] {
             required = Set(
@@ -389,7 +420,6 @@ final class FoundationModelService: ToolCapableService {
       case .bool:
         return DynamicGenerationSchema(type: Bool.self)
       case .array(let arr):
-        // Attempt array of first element type
         if let first = arr.first, let item = dynamicSchema(from: first, name: name + "Item") {
           return DynamicGenerationSchema(arrayOf: item, minimumElements: nil, maximumElements: nil)
         }
@@ -397,12 +427,10 @@ final class FoundationModelService: ToolCapableService {
           arrayOf: DynamicGenerationSchema(type: String.self), minimumElements: nil,
           maximumElements: nil)
       case .null:
-        // Default to string when null only
         return DynamicGenerationSchema(type: String.self)
       }
     }
 
-    // Helpers to extract primitive values from JSONValue
     private func jsonStringOrNil(_ value: JSONValue?) -> String? {
       guard let value else { return nil }
       if case .string(let s) = value { return s }
@@ -429,3 +457,5 @@ final class FoundationModelService: ToolCapableService {
     }
   #endif
 }
+
+

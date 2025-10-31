@@ -23,10 +23,10 @@ final class ChatSession: ObservableObject {
   init() {
     // Build options list (foundation first if available)
     var opts: [String] = []
-    if FoundationModelService.isDefaultModelAvailable() {
+    if AnyLMService.isFoundationAvailable() {
       opts.append("foundation")
     }
-    let mlx = MLXService.getAvailableModels()
+    let mlx = LocalMLXModels.getAvailableModels()
     opts.append(contentsOf: mlx)
     modelOptions = opts
     // Set default selectedModel to first available
@@ -72,39 +72,32 @@ final class ChatSession: ObservableObject {
         ServerController.signalGenerationEnd()
       }
 
-      let services: [ModelService] = [FoundationModelService(), MLXService.shared]
-      let installed = MLXService.getAvailableModels()
-      switch ModelServiceRouter.resolve(
-        requestedModel: selectedModel,
-        installedModels: installed,
-        services: services
-      ) {
-      case .none:
+      let service = AnyLMService()
+      guard service.handles(requestedModel: selectedModel) else {
         turns.append(
           ChatTurn(
-            role: .assistant, content: "No model available. Open Model Manager to download one."))
+            role: .assistant, content: "No compatible model available. Open Model Manager to download one."))
         return
-      case .service(let svc, let effectiveModel):
-        let assistantTurn = ChatTurn(role: .assistant, content: "")
-        turns.append(assistantTurn)
-        let params = GenerationParameters(temperature: 0.7, maxTokens: 1024)
-        do {
-          let stream = try await svc.streamDeltas(
-            prompt: prompt,
-            parameters: params,
-            requestedModel: effectiveModel
-          )
-          for await delta in stream {
-            if Task.isCancelled { break }
-            if !delta.isEmpty {
-              assistantTurn.content += delta
-              // Signal UI to autoscroll while streaming
-              scrollTick &+= 1
-            }
+      }
+      let assistantTurn = ChatTurn(role: .assistant, content: "")
+      turns.append(assistantTurn)
+      let params = GenerationParameters(temperature: 0.7, maxTokens: 1024)
+      do {
+        let stream = try await service.streamDeltas(
+          prompt: prompt,
+          parameters: params,
+          requestedModel: selectedModel
+        )
+        for await delta in stream {
+          if Task.isCancelled { break }
+          if !delta.isEmpty {
+            assistantTurn.content += delta
+            // Signal UI to autoscroll while streaming
+            scrollTick &+= 1
           }
-        } catch {
-          assistantTurn.content = "Error: \(error.localizedDescription)"
         }
+      } catch {
+        assistantTurn.content = "Error: \(error.localizedDescription)"
       }
     }
   }
@@ -535,7 +528,7 @@ struct ChatView: View {
         Button("Open Model Manager") {
           AppDelegate.shared?.showModelManagerWindow()
         }
-        if FoundationModelService.isDefaultModelAvailable() {
+        if AnyLMService.isFoundationAvailable() {
           Button("Use Foundation") {
             session.selectedModel = "foundation"
           }
@@ -546,7 +539,7 @@ struct ChatView: View {
   }
 
   private var hasAnyModel: Bool {
-    FoundationModelService.isDefaultModelAvailable() || !MLXService.getAvailableModels().isEmpty
+    AnyLMService.isFoundationAvailable() || !LocalMLXModels.getAvailableModels().isEmpty
   }
 }
 

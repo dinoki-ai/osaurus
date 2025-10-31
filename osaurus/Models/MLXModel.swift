@@ -14,9 +14,9 @@ struct MLXModel: Identifiable, Codable {
   let description: String
   let downloadURL: String
 
-  // Capture the models root directory at initialization time to avoid
-  // relying on a mutable global during tests or concurrent execution.
-  private let rootDirectory: URL
+  // Optional override for models root directory; when nil we consult the
+  // DirectoryPickerService at access time (on the main actor).
+  private let rootDirectoryOverride: URL?
 
   init(
     id: String,
@@ -29,14 +29,14 @@ struct MLXModel: Identifiable, Codable {
     self.name = name
     self.description = description
     self.downloadURL = downloadURL
-    self.rootDirectory = rootDirectory ?? DirectoryPickerService.shared.effectiveModelsDirectory
+    self.rootDirectoryOverride = rootDirectory
   }
 
   /// Local directory where this model should be stored
-  var localDirectory: URL {
-    // Build the path using each component of the repository id separately.
+  @MainActor var localDirectory: URL {
+    let root = rootDirectoryOverride ?? DirectoryPickerService.shared.effectiveModelsDirectory
     let components = id.split(separator: "/").map(String.init)
-    return components.reduce(rootDirectory) { partial, component in
+    return components.reduce(root) { partial, component in
       partial.appendingPathComponent(component, isDirectory: true)
     }
   }
@@ -49,7 +49,7 @@ struct MLXModel: Identifiable, Codable {
   ///   - BPE: merges.txt + (vocab.json OR vocab.txt)
   ///   - SentencePiece: tokenizer.model OR spiece.model
   /// - At least one *.safetensors file exists (weights)
-  var isDownloaded: Bool {
+  @MainActor var isDownloaded: Bool {
     let fileManager = FileManager.default
     let directory = localDirectory
 
@@ -79,7 +79,7 @@ struct MLXModel: Identifiable, Codable {
 
   /// Approximate download timestamp based on directory creation/modification time
   /// Newer downloads should have more recent dates.
-  var downloadedAt: Date? {
+  @MainActor var downloadedAt: Date? {
     let directory = localDirectory
     let values = try? directory.resourceValues(forKeys: [
       .creationDateKey, .contentModificationDateKey,

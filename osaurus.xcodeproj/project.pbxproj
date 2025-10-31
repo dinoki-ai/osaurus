@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		F0195FE52E5B467600A3DB17 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F0195FE42E5B467600A3DB17 /* Sparkle */; };
+		F03760FF2EB4EF0F00CE6818 /* AnyLanguageModel in Frameworks */ = {isa = PBXBuildFile; productRef = F03760FE2EB4EF0F00CE6818 /* AnyLanguageModel */; };
 		F0BB3CA02E52234700895593 /* NIO in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3C9F2E52234700895593 /* NIO */; };
 		F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA12E52234700895593 /* NIOConcurrencyHelpers */; };
 		F0BB3CA42E52234700895593 /* NIOCore in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA32E52234700895593 /* NIOCore */; };
@@ -105,6 +106,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F0C60D722E5491A10028ED4F /* MLXLLM in Frameworks */,
+				F03760FF2EB4EF0F00CE6818 /* AnyLanguageModel in Frameworks */,
 				F0BB3CA42E52234700895593 /* NIOCore in Frameworks */,
 				F0BB3CA02E52234700895593 /* NIO in Frameworks */,
 				F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */,
@@ -213,6 +215,7 @@
 				F0C60E862E54A26A0028ED4F /* Transformers */,
 				F0C87F532E5881BA00567D31 /* IkigaJSON */,
 				F0195FE42E5B467600A3DB17 /* Sparkle */,
+				F03760FE2EB4EF0F00CE6818 /* AnyLanguageModel */,
 			);
 			productName = osaurus;
 			productReference = F0BB3C262E51FBCC00895593 /* osaurus.app */;
@@ -322,6 +325,7 @@
 				F0D0T1002E55AAAA0028ED4F /* XCRemoteSwiftPackageReference "swift-transformers" */,
 				F0C87F522E5881BA00567D31 /* XCRemoteSwiftPackageReference "IkigaJSON" */,
 				F0195FE32E5B467600A3DB17 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				F03760FD2EB4EF0F00CE6818 /* XCRemoteSwiftPackageReference "AnyLanguageModel" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F0BB3C272E51FBCC00895593 /* Products */;
@@ -572,7 +576,7 @@
 				SPARKLE_PUBLIC_ED_KEY = REPLACE_WITH_PUBLIC_ED_KEY;
 				SU_FEED_URL = "https://dinoki.github.io/osaurus/appcast.xml";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -613,7 +617,7 @@
 				SPARKLE_PUBLIC_ED_KEY = REPLACE_WITH_PUBLIC_ED_KEY;
 				SU_FEED_URL = "https://dinoki.github.io/osaurus/appcast.xml";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -784,6 +788,14 @@
 				version = 2.7.0;
 			};
 		};
+		F03760FD2EB4EF0F00CE6818 /* XCRemoteSwiftPackageReference "AnyLanguageModel" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mattt/AnyLanguageModel.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.2.2;
+			};
+		};
 		F0BB3C9E2E52234700895593 /* XCRemoteSwiftPackageReference "swift-nio" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/apple/swift-nio.git";
@@ -831,6 +843,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F0195FE32E5B467600A3DB17 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		F03760FE2EB4EF0F00CE6818 /* AnyLanguageModel */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F03760FD2EB4EF0F00CE6818 /* XCRemoteSwiftPackageReference "AnyLanguageModel" */;
+			productName = AnyLanguageModel;
 		};
 		F0BB3C9F2E52234700895593 /* NIO */ = {
 			isa = XCSwiftPackageProductDependency;

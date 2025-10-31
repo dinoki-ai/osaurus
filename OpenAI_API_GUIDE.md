@@ -265,9 +265,14 @@ curl http://127.0.0.1:1337/v1/chat/completions \
 
 Keep `session_id` stable per conversation and per model.
 
-### Chat Templates
+### Prompting
 
-Osaurus defers chat templating to MLX `ChatSession`, which uses the model's configuration to format prompts. System messages are combined and passed as `instructions`; user content is supplied as the prompt to `respond/streamResponse`.
+Osaurus builds a simple, role‑labeled transcript via a compact prompt builder (system/user/assistant sections). Responses are generated through `AnyLanguageModel` — using Apple Foundation Models when available (macOS 26+) and the MLX backend for local models.
+
+Notes:
+
+- Foundation model usage requires macOS 26+ and appears as `model: "foundation"` (or `"default"`).
+- MLX usage requires integrating `AnyLanguageModel` with the `MLX` trait; if built without MLX, requests to local models will return an error.
 
 ## Model Naming
 
@@ -337,6 +342,6 @@ for chunk in stream:
 
 3. **Memory Usage**: Models are cached in memory after loading. Use the ModelManager UI to manage which models are downloaded.
 
-4. **GPU Acceleration**: MLX automatically uses Apple Silicon GPU acceleration when available.
+4. **Acceleration**: AnyLanguageModel's MLX backend automatically uses Apple Silicon GPU acceleration when available.
 
 5. **Context Length**: Each model has different context length limitations. Refer to the model documentation for specifics.

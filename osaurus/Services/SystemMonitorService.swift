@@ -9,7 +9,8 @@ import Combine
 import Darwin
 import Foundation
 
-class SystemMonitorService: ObservableObject {
+@MainActor
+final class SystemMonitorService: ObservableObject {
   static let shared = SystemMonitorService()
 
   @Published var cpuUsage: Double = 0.0
@@ -29,9 +30,7 @@ class SystemMonitorService: ObservableObject {
     updateResourceUsage()
 
     // Update every 2 seconds to avoid excessive CPU usage
-    timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-      self?.updateResourceUsage()
-    }
+    timer = Timer.scheduledTimer(timeInterval: 2.0, target: self, selector: #selector(updateResourceUsage), userInfo: nil, repeats: true)
   }
 
   func stopMonitoring() {
@@ -39,7 +38,7 @@ class SystemMonitorService: ObservableObject {
     timer = nil
   }
 
-  private func updateResourceUsage() {
+  @objc private func updateResourceUsage() {
     cpuUsage = getCPUUsage()
     let memInfo = getMemoryUsage()
     memoryUsage = memInfo.percentage
@@ -118,7 +117,9 @@ class SystemMonitorService: ObservableObject {
 
     guard vmResult == KERN_SUCCESS else { return (0.0, 0.0, 0.0) }
 
-    let pageSize = vm_kernel_page_size
+    var pageSizeRaw: vm_size_t = 0
+    _ = host_page_size(mach_host_self(), &pageSizeRaw)
+    let pageSize = Double(pageSizeRaw)
     let totalMemory = Double(ProcessInfo.processInfo.physicalMemory)
     let freeMemory = Double(vmInfo.free_count) * Double(pageSize)
     let inactiveMemory = Double(vmInfo.inactive_count) * Double(pageSize)
@@ -134,7 +135,5 @@ class SystemMonitorService: ObservableObject {
     return (min(100.0, max(0.0, percentage)), totalGB, usedGB)
   }
 
-  deinit {
-    stopMonitoring()
-  }
+  deinit {}
 }

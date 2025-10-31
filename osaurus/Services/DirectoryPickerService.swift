@@ -10,7 +10,7 @@ import SwiftUI
 
 /// Service for managing user-selected directory access with security-scoped bookmarks
 final class DirectoryPickerService: ObservableObject {
-  static let shared = DirectoryPickerService()
+  @MainActor static let shared = DirectoryPickerService()
 
   @Published var selectedDirectory: URL?
   @Published var hasValidDirectory: Bool = false

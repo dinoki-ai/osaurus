@@ -16,19 +16,17 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
 }
 
 /// Handles async operations for HTTP endpoints
-class AsyncHTTPHandler {
+final class AsyncHTTPHandler: @unchecked Sendable {
   static let shared = AsyncHTTPHandler()
 
   private init() {}
 
   @inline(__always)
-  private func executeOnLoop(_ loop: EventLoop, _ block: @escaping () -> Void) {
+  private func executeOnLoop(_ loop: EventLoop, _ block: @escaping @Sendable () -> Void) {
     if loop.inEventLoop {
       block()
     } else {
-      loop.execute {
-        block()
-      }
+      loop.execute { block() }
     }
   }
 
@@ -71,13 +69,8 @@ class AsyncHTTPHandler {
     ServerController.signalGenerationStart()
     defer { ServerController.signalGenerationEnd() }
     do {
-      // Prepare model services (prefer Foundation for default, MLX for explicit local models)
-      let services: [ModelService] = [FoundationModelService(), MLXService.shared]
-      let route = ModelServiceRouter.resolve(
-        requestedModel: request.model,
-        installedModels: MLXService.getAvailableModels(),
-        services: services
-      )
+      // Use unified AnyLanguageModel service directly
+      let service = AnyLMService()
 
       // Convert messages
       let messages = request.toInternalMessages()
@@ -89,40 +82,13 @@ class AsyncHTTPHandler {
       // Honor only request-provided stop sequences; otherwise rely on library EOS handling
       let effectiveStops: [String] = request.stop ?? []
 
-      switch route {
-      case .service(let service, let effectiveModel):
-        // Build a generic chat-style prompt for services
-        let prompt = PromptBuilder.buildPrompt(from: messages)
-        do {
-          if request.stream ?? false {
-            try await handleServiceStreamingResponse(
-              service: service,
-              prompt: prompt,
-              effectiveModel: effectiveModel,
-              parameters: GenerationParameters(temperature: temperature, maxTokens: maxTokens),
-              stopSequences: effectiveStops,
-              tools: request.tools,
-              toolChoice: request.tool_choice,
-              context: context,
-              writer: writer,
-              extraHeaders: extraHeaders
-            )
-          } else {
-            try await handleServiceNonStreamingResponse(
-              service: service,
-              prompt: prompt,
-              effectiveModel: effectiveModel,
-              parameters: GenerationParameters(temperature: temperature, maxTokens: maxTokens),
-              stopSequences: effectiveStops,
-              tools: request.tools,
-              toolChoice: request.tool_choice,
-              context: context,
-              extraHeaders: extraHeaders
-            )
-          }
-        }
-        return
-      case .none:
+      // Compute effective model name for response metadata
+      let trimmed = request.model.trimmingCharacters(in: .whitespacesAndNewlines)
+      let isDefault = trimmed.isEmpty || trimmed.caseInsensitiveCompare("default") == .orderedSame
+      let effectiveModel = isDefault ? "foundation" : trimmed
+
+      // Validate service can handle the request
+      guard service.handles(requestedModel: request.model) else {
         let error = OpenAIError(
           error: OpenAIError.ErrorDetail(
             message: "No compatible model service available for this request.",
@@ -135,6 +101,58 @@ class AsyncHTTPHandler {
           error, status: .notFound, context: context, extraHeaders: extraHeaders)
         return
       }
+
+      // Build a generic chat-style prompt for services
+      let prompt = PromptBuilder.buildPrompt(from: messages)
+      if request.stream ?? false {
+        try await handleServiceStreamingResponse(
+          service: service,
+          prompt: prompt,
+          effectiveModel: effectiveModel,
+          parameters: GenerationParameters(temperature: temperature, maxTokens: maxTokens),
+          stopSequences: effectiveStops,
+          tools: request.tools,
+          toolChoice: request.tool_choice,
+          context: context,
+          writer: writer,
+          extraHeaders: extraHeaders
+        )
+      } else {
+        try await handleServiceNonStreamingResponse(
+          service: service,
+          prompt: prompt,
+          effectiveModel: effectiveModel,
+          parameters: GenerationParameters(temperature: temperature, maxTokens: maxTokens),
+          stopSequences: effectiveStops,
+          tools: request.tools,
+          toolChoice: request.tool_choice,
+          context: context,
+          extraHeaders: extraHeaders
+        )
+      }
+      return
+    } catch let e as AnyLMServiceError {
+      let (status, msg, param): (HTTPResponseStatus, String, String?) = {
+        switch e {
+        case .invalidModel(let name):
+          return (.notFound, "Unknown model: \(name)", "model")
+        case .notAvailable:
+          return (
+            .serviceUnavailable,
+            "Requested model provider is not available on this system.",
+            "model")
+        }
+      }()
+      let errorResponse = OpenAIError(
+        error: OpenAIError.ErrorDetail(
+          message: msg,
+          type: "invalid_request_error",
+          param: param,
+          code: nil
+        )
+      )
+      try? await sendJSONResponse(
+        errorResponse, status: status, context: context, extraHeaders: extraHeaders)
     } catch {
       let errorResponse = OpenAIError(
         error: OpenAIError.ErrorDetail(
@@ -540,29 +558,26 @@ class AsyncHTTPHandler {
   ) async throws {
     let loop = context.eventLoop
     let ctxBox = UncheckedSendableBox(value: context)
+    // Pre-encode off the event loop to avoid capturing generic T in a @Sendable closure
+    let jsonString: String = encodeJSONString(response) ?? "{}"
+    let statusCode: Int = Int(status.code)
+    let extra = extraHeaders ?? []
     // Send response on the event loop
     loop.execute {
       let context = ctxBox.value
       guard context.channel.isActive else { return }
-      let encoder = IkigaJSONEncoder()
-      var responseHead = HTTPResponseHead(version: .http1_1, status: status)
-      var buffer = context.channel.allocator.buffer(capacity: 1024)
-      do { try encoder.encodeAndWrite(response, into: &buffer) } catch {
-        buffer.clear()
-        buffer.writeString("{}")
-      }
+      var responseHead = HTTPResponseHead(version: .http1_1, status: .init(statusCode: statusCode))
+      var buffer = context.channel.allocator.buffer(capacity: max(1024, jsonString.utf8.count + 32))
+      buffer.writeString(jsonString)
       var headers = HTTPHeaders()
       headers.add(name: "Content-Type", value: "application/json; charset=utf-8")
       headers.add(name: "Content-Length", value: String(buffer.readableBytes))
       headers.add(name: "Connection", value: "close")
-      if let extraHeaders {
-        for (n, v) in extraHeaders { headers.add(name: n, value: v) }
-      }
+      for (n, v) in extra { headers.add(name: n, value: v) }
       responseHead.headers = headers
       context.write(NIOAny(HTTPServerResponsePart.head(responseHead)), promise: nil)
       context.write(NIOAny(HTTPServerResponsePart.body(.byteBuffer(buffer))), promise: nil)
-      context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil as HTTPHeaders?))).whenComplete {
-        _ in
+      context.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil as HTTPHeaders?))).whenComplete { _ in
         let context = ctxBox.value
         context.close(promise: nil)
       }

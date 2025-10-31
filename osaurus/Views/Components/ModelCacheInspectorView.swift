@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ModelCacheInspectorView: View {
   @Environment(\.theme) private var theme
-  @State private var items: [MLXService.ModelCacheSummary] = []
+  @State private var items: [CacheItem] = []
   @State private var isClearingAll = false
 
   var body: some View {
@@ -62,12 +62,13 @@ struct ModelCacheInspectorView: View {
               }
               Spacer()
               Button(role: .destructive) {
-                MLXService.shared.unloadModel(named: item.name)
-                refresh()
+                // No-op with AnyLanguageModel (no explicit cache management)
               } label: {
                 Text("Unload")
                   .font(.system(size: 12, weight: .semibold))
               }
+              .disabled(true)
+              .help("Not supported with AnyLanguageModel runtime")
             }
             .padding(8)
             .background(
@@ -86,10 +87,7 @@ struct ModelCacheInspectorView: View {
 
       HStack {
         Button(role: .destructive) {
-          isClearingAll = true
-          MLXService.shared.clearCache()
-          refresh()
-          isClearingAll = false
+          // No-op with AnyLanguageModel
         } label: {
           HStack(spacing: 6) {
             Image(systemName: "trash")
@@ -98,6 +96,8 @@ struct ModelCacheInspectorView: View {
         }
         .buttonStyle(.bordered)
         .tint(theme.errorColor)
+        .disabled(true)
+        .help("Not supported with AnyLanguageModel runtime")
 
         Spacer()
       }
@@ -106,7 +106,18 @@ struct ModelCacheInspectorView: View {
   }
 
   private func refresh() {
-    items = MLXService.shared.cachedModelSummaries()
+    let names = LocalMLXModels.getAvailableModels()
+    var next: [CacheItem] = []
+    next.reserveCapacity(names.count)
+    for name in names {
+      if let id = LocalMLXModels.modelId(forName: name) {
+        let size = LocalMLXModels.weightsSizeBytes(forModelId: id)
+        next.append(CacheItem(name: name, bytes: size, isCurrent: false))
+      } else {
+        next.append(CacheItem(name: name, bytes: 0, isCurrent: false))
+      }
+    }
+    items = next
   }
 
   private func formatBytes(_ bytes: Int64) -> String {
@@ -117,4 +128,10 @@ struct ModelCacheInspectorView: View {
     if gb >= 1.0 { return String(format: "%.2f GB", gb) }
     return String(format: "%.1f MB", mb)
   }
+}
+
+private struct CacheItem {
+  let name: String
+  let bytes: Int64
+  let isCurrent: Bool
 }

@@ -11,6 +11,7 @@ struct CodeBlockView: View {
   let language: String?
   let baseWidth: CGFloat
   @State private var copied = false
+  @Environment(\.theme) private var theme
 
   var body: some View {
     ZStack(alignment: .topTrailing) {
@@ -20,7 +21,7 @@ struct CodeBlockView: View {
           .textSelection(.enabled)
           .padding(10)
           .frame(maxWidth: .infinity, alignment: .leading)
-          .background(codeBackground)
+          .background(theme.codeBlockBackground)
       }
 
       HStack(spacing: 6) {
@@ -53,7 +54,3 @@ struct CodeBlockView: View {
   }
 }
 
-private var codeBackground: Color {
-  let theme = ThemeManager.shared.currentTheme
-  return theme.codeBlockBackground
-}

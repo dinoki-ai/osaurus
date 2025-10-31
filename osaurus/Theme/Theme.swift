@@ -8,7 +8,7 @@
 import SwiftUI
 
 // MARK: - Theme Protocol
-protocol ThemeProtocol {
+protocol ThemeProtocol: Sendable {
   // Primary colors
   var primaryText: Color { get }
   var secondaryText: Color { get }
@@ -64,7 +64,7 @@ protocol ThemeProtocol {
 }
 
 // MARK: - Light Theme
-struct LightTheme: ThemeProtocol {
+struct LightTheme: ThemeProtocol, @unchecked Sendable {
   // Primary colors
   let primaryText = Color(hex: "1a1a1a")
   let secondaryText = Color(hex: "6b7280")
@@ -119,7 +119,7 @@ struct LightTheme: ThemeProtocol {
 }
 
 // MARK: - Dark Theme
-struct DarkTheme: ThemeProtocol {
+struct DarkTheme: ThemeProtocol, @unchecked Sendable {
   // Primary colors
   let primaryText = Color(hex: "f9fafb")
   let secondaryText = Color(hex: "9ca3af")
@@ -174,7 +174,8 @@ struct DarkTheme: ThemeProtocol {
 }
 
 // MARK: - Theme Manager
-class ThemeManager: ObservableObject {
+@MainActor
+final class ThemeManager: ObservableObject {
   static let shared = ThemeManager()
 
   @Published var currentTheme: ThemeProtocol

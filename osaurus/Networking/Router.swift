@@ -117,12 +117,12 @@ public struct Router {
   }
 
   private func modelsEndpoint() -> (HTTPResponseStatus, [(String, String)], String) {
-    var models = MLXService.getAvailableModels().map { modelName in
+    var models = LocalMLXModels.getAvailableModels().map { modelName in
       OpenAIModel(from: modelName)
     }
 
     // Expose the system default Foundation model when available
-    if FoundationModelService.isDefaultModelAvailable() {
+    if AnyLMService.isFoundationAvailable() {
       let foundation = OpenAIModel(from: "foundation")
       // Prepend so clients see a usable choice even with no local models
       models.insert(foundation, at: 0)
@@ -138,7 +138,7 @@ public struct Router {
 
   private func tagsEndpoint() -> (HTTPResponseStatus, [(String, String)], String) {
     let now = Date().ISO8601Format()
-    var models = MLXService.getAvailableModels().map { modelName in
+    var models = LocalMLXModels.getAvailableModels().map { modelName in
       var model = OpenAIModel(from: modelName)
       // Fields for "/tags" compatibility
       model.name = modelName
@@ -158,7 +158,7 @@ public struct Router {
     }
 
     // Expose the system default Foundation model when available for Ollama-compatible /tags
-    if FoundationModelService.isDefaultModelAvailable() {
+    if AnyLMService.isFoundationAvailable() {
       var foundation = OpenAIModel(from: "foundation")
       foundation.name = "foundation"
       foundation.model = "foundation"

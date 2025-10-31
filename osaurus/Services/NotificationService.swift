@@ -10,7 +10,7 @@ import Foundation
 import UserNotifications
 
 final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
-  static let shared = NotificationService()
+  @MainActor static let shared = NotificationService()
 
   private let center = UNUserNotificationCenter.current()
 

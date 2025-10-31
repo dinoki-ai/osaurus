@@ -22,7 +22,7 @@ Created by Dinoki Labs ([dinoki.ai](https://dinoki.ai)), a fully native desktop 
 
 ## Highlights
 
-- **Native MLX runtime**: Optimized for Apple Silicon using MLX/MLXLLM
+- **Native MLX runtime**: Optimized for Apple Silicon using MLX
 - **Apple Foundation Models**: Use the system default model via `model: "foundation"` or `model: "default"` on supported macOS versions; accelerated by Apple Neural Engine (ANE) when available
 - **Apple Silicon only**: Designed and tested for M‑series Macs
 - **OpenAI API compatible**: `/v1/models` and `/v1/chat/completions` (stream and non‑stream)
@@ -66,10 +66,10 @@ osaurus/
 │   └── AsyncHTTPHandler.swift      # Unified streaming handler
 ├── Services/
 │   ├── DirectoryPickerService.swift
-│   ├── FoundationModelService.swift
+│   ├── AnyLMService.swift           # Unified AnyLanguageModel service (Foundation + MLX)
 │   ├── HuggingFaceService.swift
 │   ├── LoginItemService.swift
-│   ├── MLXService.swift            # MLX loading, session caching, generation
+│   ├── LocalMLXModels.swift        # Lightweight on-disk MLX model discovery
 │   ├── ModelService.swift
 │   ├── PromptBuilder.swift
 │   ├── SearchService.swift
@@ -511,7 +511,7 @@ Foundation Models:
 
 - SwiftNIO (HTTP server)
 - SwiftUI/AppKit (UI)
-- MLX‑Swift, MLXLLM (runtime and generation)
+- AnyLanguageModel (model abstraction; Foundation + MLX)
 
 ## Contributors
 

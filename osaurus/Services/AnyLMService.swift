@@ -70,43 +70,41 @@ final class AnyLMService: ToolCapableService {
     requestedModel: String?
   ) async throws -> AsyncStream<String> {
     #if canImport(AnyLanguageModel)
-      if #available(macOS 26.0, *) {
-        let model = try resolveModel(requestedModel)
-        let options = GenerationOptions(
-          sampling: nil,
-          temperature: Double(parameters.temperature),
-          maximumResponseTokens: parameters.maxTokens
-        )
+      let model = try resolveModel(requestedModel)
+      let options = GenerationOptions(
+        sampling: nil,
+        temperature: Double(parameters.temperature),
+        maximumResponseTokens: parameters.maxTokens
+      )
 
-        let session = LanguageModelSession(model: model)
-        let stream = session.streamResponse(to: prompt, options: options)
+      let session = LanguageModelSession(model: model)
+      let stream = session.streamResponse(options: options) {
+        Prompt(prompt)
+      }
 
-        return AsyncStream<String> { continuation in
-          Task {
-            var previous = ""
-            do {
-              for try await snapshot in stream {
-                let current = snapshot.content
-                let delta: String
-                if current.hasPrefix(previous) {
-                  delta = String(current.dropFirst(previous.count))
-                } else {
-                  delta = current
-                }
-                if !delta.isEmpty {
-                  continuation.yield(delta)
-                }
-                previous = current
+      return AsyncStream<String> { continuation in
+        Task {
+          var previous = ""
+          do {
+            for try await snapshot in stream {
+              let current = snapshot.content
+              let delta: String
+              if current.hasPrefix(previous) {
+                delta = String(current.dropFirst(previous.count))
+              } else {
+                delta = current
               }
-            } catch {
-              let prefix = "__OS_ERROR__:"
-              continuation.yield(prefix + error.localizedDescription)
+              if !delta.isEmpty {
+                continuation.yield(delta)
+              }
+              previous = current
             }
-            continuation.finish()
+          } catch {
+            let prefix = "__OS_ERROR__:"
+            continuation.yield(prefix + error.localizedDescription)
           }
+          continuation.finish()
         }
-      } else {
-        throw AnyLMServiceError.notAvailable
       }
     #else
       throw AnyLMServiceError.notAvailable
@@ -119,19 +117,17 @@ final class AnyLMService: ToolCapableService {
     requestedModel: String?
   ) async throws -> String {
     #if canImport(AnyLanguageModel)
-      if #available(macOS 26.0, *) {
-        let model = try resolveModel(requestedModel)
-        let options = GenerationOptions(
-          sampling: nil,
-          temperature: Double(parameters.temperature),
-          maximumResponseTokens: parameters.maxTokens
-        )
-        let session = LanguageModelSession(model: model)
-        let response = try await session.respond(to: prompt, options: options)
-        return response.content
-      } else {
-        throw AnyLMServiceError.notAvailable
+      let model = try resolveModel(requestedModel)
+      let options = GenerationOptions(
+        sampling: nil,
+        temperature: Double(parameters.temperature),
+        maximumResponseTokens: parameters.maxTokens
+      )
+      let session = LanguageModelSession(model: model)
+      let response = try await session.respond(options: options) {
+        Prompt(prompt)
       }
+      return response.content
     #else
       throw AnyLMServiceError.notAvailable
     #endif
@@ -163,7 +159,9 @@ final class AnyLMService: ToolCapableService {
         do {
           let model = try resolveModel(requestedModel)
           let session = LanguageModelSession(model: model, tools: amlTools, instructions: nil)
-          let response = try await session.respond(to: prompt, options: options)
+          let response = try await session.respond(options: options) {
+            Prompt(prompt)
+          }
           var reply = response.content
           if !stopSequences.isEmpty {
             for s in stopSequences {
@@ -211,7 +209,9 @@ final class AnyLMService: ToolCapableService {
 
         let model = try resolveModel(requestedModel)
         let session = LanguageModelSession(model: model, tools: amlTools, instructions: nil)
-        let stream = session.streamResponse(to: prompt, options: options)
+        let stream = session.streamResponse(options: options) {
+          Prompt(prompt)
+        }
 
         return AsyncThrowingStream<String, Error> { continuation in
           Task {
@@ -262,36 +262,28 @@ final class AnyLMService: ToolCapableService {
   // MARK: - Private helpers
 
   #if canImport(AnyLanguageModel)
-    @available(macOS 26.0, *)
     private func resolveModel(_ requestedModel: String?) throws -> any LanguageModel {
       let trimmed = (requestedModel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
       if trimmed.isEmpty || trimmed.caseInsensitiveCompare("default") == .orderedSame
         || trimmed.caseInsensitiveCompare("foundation") == .orderedSame
       {
-        guard Self.isFoundationAvailable() else { throw AnyLMServiceError.notAvailable }
+        guard #available(macOS 26.0, *), Self.isFoundationAvailable() else {
+          throw AnyLMServiceError.notAvailable
+        }
         return SystemLanguageModel.default
       }
 
       if let id = LocalMLXModels.modelId(forName: trimmed) {
-        #if AML_WITH_MLX
-          return MLXLanguageModel(modelId: id)
-        #else
-          throw AnyLMServiceError.notAvailable
-        #endif
+        return MLXLanguageModel(modelId: id)
       }
 
       if trimmed.contains("/") {
-        #if AML_WITH_MLX
-          return MLXLanguageModel(modelId: trimmed)
-        #else
-          throw AnyLMServiceError.notAvailable
-        #endif
+        return MLXLanguageModel(modelId: trimmed)
       }
 
       throw AnyLMServiceError.invalidModel(trimmed)
     }
 
-    @available(macOS 26.0, *)
     private struct ToolInvocationError: Error {
       let toolName: String
       let jsonArguments: String

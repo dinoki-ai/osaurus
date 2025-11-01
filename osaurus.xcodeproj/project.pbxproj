@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		F0195FE52E5B467600A3DB17 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = F0195FE42E5B467600A3DB17 /* Sparkle */; };
 		F03760FF2EB4EF0F00CE6818 /* AnyLanguageModel in Frameworks */ = {isa = PBXBuildFile; productRef = F03760FE2EB4EF0F00CE6818 /* AnyLanguageModel */; };
+		F07943B62EB55F92003EE3BA /* LocalDeps in Frameworks */ = {isa = PBXBuildFile; productRef = F07943B52EB55F92003EE3BA /* LocalDeps */; };
 		F0BB3CA02E52234700895593 /* NIO in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3C9F2E52234700895593 /* NIO */; };
 		F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA12E52234700895593 /* NIOConcurrencyHelpers */; };
 		F0BB3CA42E52234700895593 /* NIOCore in Frameworks */ = {isa = PBXBuildFile; productRef = F0BB3CA32E52234700895593 /* NIOCore */; };
@@ -108,6 +109,7 @@
 				F0C60D722E5491A10028ED4F /* MLXLLM in Frameworks */,
 				F03760FF2EB4EF0F00CE6818 /* AnyLanguageModel in Frameworks */,
 				F0BB3CA42E52234700895593 /* NIOCore in Frameworks */,
+				F07943B62EB55F92003EE3BA /* LocalDeps in Frameworks */,
 				F0BB3CA02E52234700895593 /* NIO in Frameworks */,
 				F0BB3CA22E52234700895593 /* NIOConcurrencyHelpers in Frameworks */,
 				F0C60D622E53DE140028ED4F /* MLX in Frameworks */,
@@ -216,6 +218,7 @@
 				F0C87F532E5881BA00567D31 /* IkigaJSON */,
 				F0195FE42E5B467600A3DB17 /* Sparkle */,
 				F03760FE2EB4EF0F00CE6818 /* AnyLanguageModel */,
+				F07943B52EB55F92003EE3BA /* LocalDeps */,
 			);
 			productName = osaurus;
 			productReference = F0BB3C262E51FBCC00895593 /* osaurus.app */;
@@ -326,6 +329,7 @@
 				F0C87F522E5881BA00567D31 /* XCRemoteSwiftPackageReference "IkigaJSON" */,
 				F0195FE32E5B467600A3DB17 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				F03760FD2EB4EF0F00CE6818 /* XCRemoteSwiftPackageReference "AnyLanguageModel" */,
+				F07943B42EB55F92003EE3BA /* XCLocalSwiftPackageReference "LocalDeps" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F0BB3C272E51FBCC00895593 /* Products */;
@@ -799,6 +803,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		F07943B42EB55F92003EE3BA /* XCLocalSwiftPackageReference "LocalDeps" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = LocalDeps;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		F0195FE32E5B467600A3DB17 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -868,6 +879,10 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F03760FD2EB4EF0F00CE6818 /* XCRemoteSwiftPackageReference "AnyLanguageModel" */;
 			productName = AnyLanguageModel;
+		};
+		F07943B52EB55F92003EE3BA /* LocalDeps */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = LocalDeps;
 		};
 		F0BB3C9F2E52234700895593 /* NIO */ = {
 			isa = XCSwiftPackageProductDependency;

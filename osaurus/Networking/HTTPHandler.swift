@@ -5,6 +5,7 @@
 //  Created by Terence on 8/17/25.
 //
 
+import AnyLanguageModel
 import Foundation
 import NIOCore
 import NIOHTTP1
@@ -114,8 +115,8 @@ final class HTTPHandler: ChannelInboundHandler, Sendable {
         sendResponse(
           context: context, version: head.version, status: .ok, headers: headers, body: body)
       } else if head.method == .GET, path == "/models" {
-        var models = MLXService.getAvailableModels().map { OpenAIModel(from: $0) }
-        if FoundationModelService.isDefaultModelAvailable() {
+        var models = ModelManager.installedModelNames().map { OpenAIModel(from: $0) }
+        if systemModelAvailable() {
           models.insert(OpenAIModel(from: "foundation"), at: 0)
         }
         let response = ModelsResponse(data: models)
@@ -127,7 +128,7 @@ final class HTTPHandler: ChannelInboundHandler, Sendable {
           context: context, version: head.version, status: .ok, headers: headers, body: json)
       } else if head.method == .GET, path == "/tags" {
         let now = Date().ISO8601Format()
-        var models = MLXService.getAvailableModels().map { name -> OpenAIModel in
+        var models = ModelManager.installedModelNames().map { name -> OpenAIModel in
           var m = OpenAIModel(from: name)
           m.name = name
           m.model = name
@@ -144,7 +145,7 @@ final class HTTPHandler: ChannelInboundHandler, Sendable {
           )
           return m
         }
-        if FoundationModelService.isDefaultModelAvailable() {
+        if systemModelAvailable() {
           var fm = OpenAIModel(from: "foundation")
           fm.name = "foundation"
           fm.model = "foundation"
@@ -224,6 +225,19 @@ final class HTTPHandler: ChannelInboundHandler, Sendable {
       headers: [("Content-Type", "text/plain; charset=utf-8")],
       body: "Bad Request"
     )
+  }
+
+  // MARK: - System model availability helper
+  private func systemModelAvailable() -> Bool {
+    #if canImport(AnyLanguageModel)
+      if #available(macOS 26.0, *) {
+        return SystemLanguageModel.default.isAvailable
+      } else {
+        return false
+      }
+    #else
+      return false
+    #endif
   }
 
   private func sendResponse(

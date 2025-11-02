@@ -5,6 +5,7 @@
 //  Created by Terence on 8/17/25.
 //
 
+import AnyLanguageModel
 import Foundation
 import IkigaJSON
 import NIOCore
@@ -117,12 +118,12 @@ public struct Router {
   }
 
   private func modelsEndpoint() -> (HTTPResponseStatus, [(String, String)], String) {
-    var models = MLXService.getAvailableModels().map { modelName in
+    var models = ModelManager.installedModelNames().map { modelName in
       OpenAIModel(from: modelName)
     }
 
     // Expose the system default Foundation model when available
-    if FoundationModelService.isDefaultModelAvailable() {
+    if systemModelAvailable() {
       let foundation = OpenAIModel(from: "foundation")
       // Prepend so clients see a usable choice even with no local models
       models.insert(foundation, at: 0)
@@ -138,7 +139,7 @@ public struct Router {
 
   private func tagsEndpoint() -> (HTTPResponseStatus, [(String, String)], String) {
     let now = Date().ISO8601Format()
-    var models = MLXService.getAvailableModels().map { modelName in
+    var models = ModelManager.installedModelNames().map { modelName in
       var model = OpenAIModel(from: modelName)
       // Fields for "/tags" compatibility
       model.name = modelName
@@ -158,7 +159,7 @@ public struct Router {
     }
 
     // Expose the system default Foundation model when available for Ollama-compatible /tags
-    if FoundationModelService.isDefaultModelAvailable() {
+    if systemModelAvailable() {
       var foundation = OpenAIModel(from: "foundation")
       foundation.name = "foundation"
       foundation.model = "foundation"
@@ -260,4 +261,17 @@ public struct Router {
     if let r = stripPrefix("/v1", from: path) { return r }
     return path
   }
+}
+
+// MARK: - System model availability helper
+private func systemModelAvailable() -> Bool {
+  #if canImport(AnyLanguageModel)
+    if #available(macOS 26.0, *) {
+      return SystemLanguageModel.default.isAvailable
+    } else {
+      return false
+    }
+  #else
+    return false
+  #endif
 }

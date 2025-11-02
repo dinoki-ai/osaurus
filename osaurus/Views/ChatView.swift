@@ -5,6 +5,7 @@
 //  Created by Terence on 10/26/25.
 //
 
+import AnyLanguageModel
 import AppKit
 import Carbon.HIToolbox
 import Combine
@@ -23,10 +24,10 @@ final class ChatSession: ObservableObject {
   init() {
     // Build options list (foundation first if available)
     var opts: [String] = []
-    if FoundationModelService.isDefaultModelAvailable() {
+    if systemModelAvailable() {
       opts.append("foundation")
     }
-    let mlx = MLXService.getAvailableModels()
+    let mlx = ModelManager.installedModelNames()
     opts.append(contentsOf: mlx)
     modelOptions = opts
     // Set default selectedModel to first available
@@ -531,7 +532,7 @@ struct ChatView: View {
         Button("Open Model Manager") {
           AppDelegate.shared?.showModelManagerWindow()
         }
-        if FoundationModelService.isDefaultModelAvailable() {
+        if systemModelAvailable() {
           Button("Use Foundation") {
             session.selectedModel = "foundation"
           }
@@ -542,7 +543,19 @@ struct ChatView: View {
   }
 
   private var hasAnyModel: Bool {
-    FoundationModelService.isDefaultModelAvailable() || !MLXService.getAvailableModels().isEmpty
+    systemModelAvailable() || !ModelManager.installedModelNames().isEmpty
+  }
+
+  private func systemModelAvailable() -> Bool {
+    #if canImport(AnyLanguageModel)
+      if #available(macOS 26.0, *) {
+        return SystemLanguageModel.default.isAvailable
+      } else {
+        return false
+      }
+    #else
+      return false
+    #endif
   }
 }
 

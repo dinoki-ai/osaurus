@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ModelCacheInspectorView: View {
   @Environment(\.theme) private var theme
-  @State private var items: [ModelRuntime.ModelCacheSummary] = []
+  @State private var items: [CacheItem] = []
   @State private var isClearingAll = false
 
   var body: some View {
@@ -34,27 +34,13 @@ struct ModelCacheInspectorView: View {
           .padding(.vertical, 8)
       } else {
         VStack(spacing: 8) {
-          ForEach(items, id: \.name) { item in
+          ForEach(items, id: \.id) { item in
             HStack(alignment: .center, spacing: 8) {
               VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                   Text(item.name)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(theme.primaryText)
-                  if item.isCurrent {
-                    Text("In Use")
-                      .font(.system(size: 10, weight: .semibold))
-                      .padding(.horizontal, 6)
-                      .padding(.vertical, 2)
-                      .background(
-                        Capsule()
-                          .fill(theme.accentColor.opacity(0.15))
-                      )
-                      .overlay(
-                        Capsule().stroke(theme.accentColor, lineWidth: 1)
-                      )
-                      .foregroundColor(theme.accentColor)
-                  }
                 }
                 Text(formatBytes(item.bytes))
                   .font(.system(size: 11, design: .monospaced))
@@ -62,12 +48,12 @@ struct ModelCacheInspectorView: View {
               }
               Spacer()
               Button(role: .destructive) {
-                Task {
-                  await MLXService().unloadRuntimeModel(named: item.name)
+                Task { @MainActor in
+                  ModelManager.shared.deleteModel(item.model)
                   await refresh()
                 }
               } label: {
-                Text("Unload")
+                Text("Delete")
                   .font(.system(size: 12, weight: .semibold))
               }
             }
@@ -90,7 +76,7 @@ struct ModelCacheInspectorView: View {
         Button(role: .destructive) {
           Task {
             isClearingAll = true
-            await MLXService().clearRuntimeCache()
+            await clearAll()
             await refresh()
             isClearingAll = false
           }
@@ -112,7 +98,14 @@ struct ModelCacheInspectorView: View {
   }
 
   private func refresh() async {
-    items = await MLXService().cachedRuntimeSummaries()
+    let models = ModelManager.discoverLocalModels()
+    let computed: [CacheItem] = models.map { m in
+      let bytes = directoryAllocatedSize(at: m.localDirectory) ?? 0
+      return CacheItem(id: m.id, name: m.name, bytes: bytes, model: m)
+    }.sorted { lhs, rhs in
+      lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+    }
+    await MainActor.run { items = computed }
   }
 
   private func formatBytes(_ bytes: Int64) -> String {
@@ -123,4 +116,49 @@ struct ModelCacheInspectorView: View {
     if gb >= 1.0 { return String(format: "%.2f GB", gb) }
     return String(format: "%.1f MB", mb)
   }
+
+  private func directoryAllocatedSize(at url: URL) -> Int64? {
+    let fileManager = FileManager.default
+    var total: Int64 = 0
+    guard
+      let enumerator = fileManager.enumerator(
+        at: url,
+        includingPropertiesForKeys: [
+          .totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey, .isRegularFileKey,
+        ], options: [], errorHandler: nil)
+    else {
+      return nil
+    }
+    for case let fileURL as URL in enumerator {
+      do {
+        let resourceValues = try fileURL.resourceValues(forKeys: [
+          .isRegularFileKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey,
+        ])
+        guard resourceValues.isRegularFile == true else { continue }
+        if let allocated = resourceValues.totalFileAllocatedSize ?? resourceValues.fileAllocatedSize
+        {
+          total += Int64(allocated)
+        } else if let size = resourceValues.fileSize {
+          total += Int64(size)
+        }
+      } catch {
+        continue
+      }
+    }
+    return total
+  }
+
+  private func clearAll() async {
+    await MainActor.run {
+      let models = ModelManager.discoverLocalModels()
+      for m in models { ModelManager.shared.deleteModel(m) }
+    }
+  }
+}
+
+private struct CacheItem: Identifiable {
+  let id: String
+  let name: String
+  let bytes: Int64
+  let model: MLXModel
 }

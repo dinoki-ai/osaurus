@@ -12,9 +12,9 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
   private let installedModelsProvider: @Sendable () -> [String]
 
   init(
-    services: [ModelService] = [FoundationModelService(), MLXService()],
+    services: [ModelService] = [AnyLanguageModelService()],
     installedModelsProvider: @escaping @Sendable () -> [String] = {
-      MLXService.getAvailableModels()
+      ModelManager.installedModelNames()
     }
   ) {
     self.services = services

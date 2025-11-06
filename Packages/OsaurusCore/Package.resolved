@@ -1,6 +1,24 @@
 {
-  "originHash" : "d7e9ad59e6bfc2fcce34a03814efce4b08db67d6c6f7a31839951e0dfe437a93",
+  "originHash" : "f0d17ef5da63a67574f35adc4f5b83cbab5cf59c0d9042c257dc8ae8e4f6cc6a",
   "pins" : [
+    {
+      "identity" : "anylanguagemodel",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mattt/AnyLanguageModel.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "06bbd0ae677c4fd286323a1c368d2dcfd0638bfe"
+      }
+    },
+    {
+      "identity" : "eventsource",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mattt/EventSource.git",
+      "state" : {
+        "revision" : "ca2a9d90cbe49e09b92f4b6ebd922c03ebea51d0",
+        "version" : "1.3.0"
+      }
+    },
     {
       "identity" : "gzipswift",
       "kind" : "remoteSourceControl",
@@ -20,6 +38,24 @@
       }
     },
     {
+      "identity" : "jsonschema",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mattt/JSONSchema.git",
+      "state" : {
+        "revision" : "4c6f2467d5bc72b062c7a9b7e4cd77a09635ea8b",
+        "version" : "1.3.1"
+      }
+    },
+    {
+      "identity" : "llama.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mattt/llama.swift",
+      "state" : {
+        "revision" : "7a289f493d7734286841f86d8ccb437c0c1d9aa4",
+        "version" : "1.6967.0"
+      }
+    },
+    {
       "identity" : "mlx-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ml-explore/mlx-swift",
@@ -31,10 +67,19 @@
     {
       "identity" : "mlx-swift-examples",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ml-explore/mlx-swift-examples",
+      "location" : "https://github.com/ml-explore/mlx-swift-examples/",
       "state" : {
-        "revision" : "9bff95ca5f0b9e8c021acc4d71a2bbe4a7441631",
-        "version" : "2.29.1"
+        "branch" : "main",
+        "revision" : "b0717631e37a7940b292eec11255d60029ed7a4d"
+      }
+    },
+    {
+      "identity" : "partialjsondecoder",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mattt/PartialJSONDecoder.git",
+      "state" : {
+        "revision" : "e4d389e6bcc6771bb988d1a8a17695d8bfa97172",
+        "version" : "1.0.0"
       }
     },
     {
@@ -92,6 +137,15 @@
       }
     },
     {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "0687f71944021d616d34d922343dcef086855920",
+        "version" : "600.0.1"
+      }
+    },
+    {
       "identity" : "swift-system",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-system.git",
@@ -105,8 +159,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/huggingface/swift-transformers",
       "state" : {
-        "revision" : "a2e184dddb4757bc943e77fbe99ac6786c53f0b2",
-        "version" : "1.0.0"
+        "revision" : "d363e83a77bafe144808a3d01556139fe67cd8bc",
+        "version" : "1.1.2"
       }
     }
   ],

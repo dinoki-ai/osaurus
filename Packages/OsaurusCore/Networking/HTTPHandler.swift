@@ -114,8 +114,8 @@ final class HTTPHandler: ChannelInboundHandler, Sendable {
         sendResponse(
           context: context, version: head.version, status: .ok, headers: headers, body: body)
       } else if head.method == .GET, path == "/models" {
-        var models = MLXService.getAvailableModels().map { OpenAIModel(from: $0) }
-        if FoundationModelService.isDefaultModelAvailable() {
+        var models = ModelManager.installedModelNames().map { OpenAIModel(from: $0) }
+        if AnyLanguageModelService.isDefaultSystemModelAvailable() {
           models.insert(OpenAIModel(from: "foundation"), at: 0)
         }
         let response = ModelsResponse(data: models)
@@ -127,7 +127,7 @@ final class HTTPHandler: ChannelInboundHandler, Sendable {
           context: context, version: head.version, status: .ok, headers: headers, body: json)
       } else if head.method == .GET, path == "/tags" {
         let now = Date().ISO8601Format()
-        var models = MLXService.getAvailableModels().map { name -> OpenAIModel in
+        var models = ModelManager.installedModelNames().map { name -> OpenAIModel in
           var m = OpenAIModel(from: name)
           m.name = name
           m.model = name
@@ -144,7 +144,7 @@ final class HTTPHandler: ChannelInboundHandler, Sendable {
           )
           return m
         }
-        if FoundationModelService.isDefaultModelAvailable() {
+        if AnyLanguageModelService.isDefaultSystemModelAvailable() {
           var fm = OpenAIModel(from: "foundation")
           fm.name = "foundation"
           fm.model = "foundation"

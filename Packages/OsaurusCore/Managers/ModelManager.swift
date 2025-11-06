@@ -489,7 +489,7 @@ final class ModelManager: NSObject, ObservableObject {
             self.progressSamples[model.id] = nil
             self.downloadSizeEstimates[model.id] = nil
             if completed {
-              NotificationService.shared.postModelReady(modelId: model.id, modelName: model.name)
+              // NotificationService.shared.postModelReady(modelId: model.id, modelName: model.name)
             }
           }
         }

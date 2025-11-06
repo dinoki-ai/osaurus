@@ -23,10 +23,10 @@ final class ChatSession: ObservableObject {
   init() {
     // Build options list (foundation first if available)
     var opts: [String] = []
-    if FoundationModelService.isDefaultModelAvailable() {
+    if AnyLanguageModelService.isDefaultSystemModelAvailable() {
       opts.append("foundation")
     }
-    let mlx = MLXService.getAvailableModels()
+    let mlx = ModelManager.installedModelNames()
     opts.append(contentsOf: mlx)
     modelOptions = opts
     // Set default selectedModel to first available
@@ -35,10 +35,10 @@ final class ChatSession: ObservableObject {
 
   func refreshModelOptions() {
     var opts: [String] = []
-    if FoundationModelService.isDefaultModelAvailable() {
+    if AnyLanguageModelService.isDefaultSystemModelAvailable() {
       opts.append("foundation")
     }
-    let mlx = MLXService.getAvailableModels()
+    let mlx = ModelManager.installedModelNames()
     opts.append(contentsOf: mlx)
     let prev = selectedModel
     let newSelected = (prev != nil && opts.contains(prev!)) ? prev : opts.first
@@ -603,7 +603,7 @@ struct ChatView: View {
         Button("Open Model Manager") {
           AppDelegate.shared?.showModelManagerWindow()
         }
-        if FoundationModelService.isDefaultModelAvailable() {
+        if AnyLanguageModelService.isDefaultSystemModelAvailable() {
           Button("Use Foundation") {
             session.selectedModel = "foundation"
           }
@@ -614,7 +614,7 @@ struct ChatView: View {
   }
 
   private var hasAnyModel: Bool {
-    FoundationModelService.isDefaultModelAvailable() || !MLXService.getAvailableModels().isEmpty
+    (AnyLanguageModelService.isDefaultSystemModelAvailable()) || (!ModelManager.installedModelNames().isEmpty)
   }
 }
 

@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.1
 import PackageDescription
 
 let package = Package(
@@ -14,6 +14,11 @@ let package = Package(
     .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.29.1"),
     .package(url: "https://github.com/ml-explore/mlx-swift-examples", from: "2.29.1"),
     .package(url: "https://github.com/huggingface/swift-transformers", from: "1.0.0"),
+    .package(
+      url: "https://github.com/mattt/AnyLanguageModel.git",
+      branch: "main",
+      traits: ["MLX"]
+    )
   ],
   targets: [
     .target(
@@ -28,6 +33,7 @@ let package = Package(
         .product(name: "MLXLLM", package: "mlx-swift-examples"),
         .product(name: "MLXLMCommon", package: "mlx-swift-examples"),
         .product(name: "Hub", package: "swift-transformers"),
+        .product(name: "AnyLanguageModel", package: "AnyLanguageModel"),
       ],
       path: ".",
       exclude: ["Tests"]

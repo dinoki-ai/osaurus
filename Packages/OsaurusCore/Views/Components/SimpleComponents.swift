@@ -583,9 +583,7 @@ struct SystemResourceMonitor: View {
       attachmentAnchor: .point(.bottom),
       arrowEdge: .top
     ) {
-      ModelCacheInspectorView()
-        .frame(minWidth: 280)
-        .padding(12)
+      // ModelCacheInspectorView removed with ModelRuntime deprecation
     }
   }
 

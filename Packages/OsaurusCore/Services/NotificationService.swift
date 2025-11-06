@@ -23,23 +23,23 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   }
 
   func configureOnLaunch() {
-    center.delegate = self
-    // Register category with an action to open the Model Manager window
-    let openAction = UNNotificationAction(
-      identifier: actionOpenId,
-      title: "Open Models",
-      options: [.foreground]
-    )
-    let category = UNNotificationCategory(
-      identifier: categoryId,
-      actions: [openAction],
-      intentIdentifiers: [],
-      options: []
-    )
-    center.setNotificationCategories([category])
+    // center.delegate = self
+    // // Register category with an action to open the Model Manager window
+    // let openAction = UNNotificationAction(
+    //   identifier: actionOpenId,
+    //   title: "Open Models",
+    //   options: [.foreground]
+    // )
+    // let category = UNNotificationCategory(
+    //   identifier: categoryId,
+    //   actions: [openAction],
+    //   intentIdentifiers: [],
+    //   options: []
+    // )
+    // center.setNotificationCategories([category])
 
-    // Request authorization (best-effort; user may have already granted/denied)
-    center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    // // Request authorization (best-effort; user may have already granted/denied)
+    // center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
   }
 
   func postModelReady(modelId: String, modelName: String) {
@@ -50,13 +50,23 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     content.categoryIdentifier = categoryId
 
     // Deliver shortly after scheduling
-    let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.2, repeats: false)
+    let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1.0, repeats: false)
+    // Sanitize identifier to avoid invalid characters
+    let safeId = modelId.replacingOccurrences(
+      of: "[^A-Za-z0-9_.-]",
+      with: "-",
+      options: .regularExpression
+    )
     let request = UNNotificationRequest(
-      identifier: "model-ready-\(modelId)",
+      identifier: "model-ready-\(safeId)",
       content: content,
       trigger: trigger
     )
-    center.add(request, withCompletionHandler: nil)
+    center.add(request) { error in
+      if let error {
+        NSLog("UNUserNotification add error: \(error.localizedDescription)")
+      }
+    }
   }
 
   // MARK: - UNUserNotificationCenterDelegate

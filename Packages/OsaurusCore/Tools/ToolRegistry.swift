@@ -35,6 +35,7 @@ final class ToolRegistry {
         // Register built-in tools
         register(FileReadTool())
         register(FileWriteTool())
+        register(ListDirTool())
     }
 
     func register(_ tool: OsaurusTool) {
@@ -102,8 +103,8 @@ final class ToolRegistry {
                 }
             }
         } else {
-            // Default for built-in tools without requirements: auto-run unless explicitly denied
-            let effectivePolicy = configuration.policy[name] ?? .auto
+            // Default for built-in tools without requirements: ask unless explicitly set
+            let effectivePolicy = configuration.policy[name] ?? .ask
             if effectivePolicy == .deny {
                 throw NSError(
                     domain: "ToolRegistry",
@@ -183,7 +184,7 @@ final class ToolRegistry {
             defaultPolicy = p.defaultPermissionPolicy
             requirements = p.requirements
         } else {
-            defaultPolicy = .auto
+            defaultPolicy = .ask
             requirements = []
         }
         let configured = configuration.policy[name]

@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.1
 import PackageDescription
 
 let package = Package(
@@ -15,6 +15,7 @@ let package = Package(
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.29.1"),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.29.2"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.2"),
+        .package(url: "https://github.com/mattt/AnyLanguageModel.git", branch: "main", traits: ["MLX"]),
         .package(path: "../OsaurusRepository"),
     ],
     targets: [
@@ -31,6 +32,7 @@ let package = Package(
                 .product(name: "MLXLLM", package: "mlx-swift-lm"),
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
                 .product(name: "Hub", package: "swift-transformers"),
+                .product(name: "AnyLanguageModel", package: "AnyLanguageModel"),
                 .product(name: "OsaurusRepository", package: "OsaurusRepository"),
             ],
             path: ".",

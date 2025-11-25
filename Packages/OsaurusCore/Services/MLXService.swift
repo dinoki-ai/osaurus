@@ -4,6 +4,10 @@
 //
 //  Migrated to Swift 6 actors; delegates runtime state to ModelManager/ModelRuntime.
 //
+//  MIGRATION NOTE: MLX models are transitioning to AnyLanguageModel's MLXLanguageModel.
+//  The model discovery functions (getAvailableModels, findModel) remain in use.
+//  Generation functions will be deprecated once AnyLanguageModel MLX integration is complete.
+//
 
 import Foundation
 
@@ -26,7 +30,9 @@ actor MLXService: ToolCapableService {
     nonisolated func handles(requestedModel: String?) -> Bool {
         let trimmed = (requestedModel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        return Self.findModel(named: trimmed) != nil
+        let result = Self.findModel(named: trimmed) != nil
+        NSLog("[MLXService] handles(requestedModel: \(trimmed)) -> \(result), available: \(Self.getAvailableModels())")
+        return result
     }
 
     // MARK: - Static discovery wrappers (delegate to ModelManager)
@@ -127,7 +133,9 @@ actor MLXService: ToolCapableService {
         toolChoice: ToolChoiceOption?,
         requestedModel: String?
     ) async throws -> AsyncThrowingStream<String, Error> {
+        NSLog("[MLXService] streamWithTools called with requestedModel: \(requestedModel ?? "nil")")
         let model = try selectModel(requestedName: requestedModel)
+        NSLog("[MLXService] selectModel returned: name=\(model.name), modelId=\(model.modelId)")
         return try await ModelRuntime.shared.streamWithTools(
             messages: messages,
             parameters: parameters,

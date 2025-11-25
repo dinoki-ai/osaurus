@@ -4,6 +4,10 @@
 //
 //  Created by Terence on 10/14/25.
 //
+//  DEPRECATED: Apple Foundation Models are now accessed via AnyLanguageModel.
+//  See LanguageModelFactory.swift for the new provider system.
+//  This file provides backward compatibility during migration.
+//
 
 import Foundation
 

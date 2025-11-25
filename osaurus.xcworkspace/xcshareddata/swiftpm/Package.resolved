@@ -1,6 +1,15 @@
 {
-  "originHash" : "588e788b82444fb2d4cf61e84fc839d88fcf5a8a93baaccfb16ad9541ee0005a",
+  "originHash" : "0762580a84c1bb2e94984348988bbd79a5963630810d1ff32ea6440d8568efbf",
   "pins" : [
+    {
+      "identity" : "anylanguagemodel",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mattt/AnyLanguageModel.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "ab0db9829e5af0f61808a999743ded98be3f2689"
+      }
+    },
     {
       "identity" : "eventsource",
       "kind" : "remoteSourceControl",
@@ -20,6 +29,24 @@
       }
     },
     {
+      "identity" : "jsonschema",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mattt/JSONSchema",
+      "state" : {
+        "revision" : "4c6f2467d5bc72b062c7a9b7e4cd77a09635ea8b",
+        "version" : "1.3.1"
+      }
+    },
+    {
+      "identity" : "llama.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mattt/llama.swift",
+      "state" : {
+        "revision" : "6786a59796e343f03cb4f83aae900e6a2ae16c6a",
+        "version" : "1.7157.0"
+      }
+    },
+    {
       "identity" : "mlx-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ml-explore/mlx-swift",
@@ -33,8 +60,17 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ml-explore/mlx-swift-lm",
       "state" : {
-        "revision" : "01852971866b17889f7aff27500cc62d9148b0df",
-        "version" : "2.29.2"
+        "branch" : "main",
+        "revision" : "b857882f15c8bad077644898e0d3ab44c15c8852"
+      }
+    },
+    {
+      "identity" : "partialjsondecoder",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mattt/PartialJSONDecoder",
+      "state" : {
+        "revision" : "e4d389e6bcc6771bb988d1a8a17695d8bfa97172",
+        "version" : "1.0.0"
       }
     },
     {
@@ -107,6 +143,15 @@
       "state" : {
         "revision" : "c0407a0b52677cb395d824cac2879b963075ba8c",
         "version" : "0.10.2"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax",
+      "state" : {
+        "revision" : "0687f71944021d616d34d922343dcef086855920",
+        "version" : "600.0.1"
       }
     },
     {

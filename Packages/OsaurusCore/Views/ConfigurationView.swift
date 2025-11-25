@@ -22,6 +22,9 @@ struct ConfigurationView: View {
     @State private var tempChatTopP: String = ""
     @State private var tempChatMaxToolAttempts: String = ""
 
+    // Provider settings state
+    @State private var tempProviderConfig: ProviderConfiguration = .default
+
     // Advanced settings state
     @State private var tempTopP: String = ""
     @State private var tempKVBits: String = ""
@@ -51,6 +54,9 @@ struct ConfigurationView: View {
             // Scrollable content area
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    // Provider settings section
+                    ProviderSettingsView(providerConfig: $tempProviderConfig)
+
                     // Chat settings section
                     VStack(alignment: .leading, spacing: 12) {
                         Label("Chat", systemImage: "message")
@@ -421,7 +427,7 @@ struct ConfigurationView: View {
                 }
                 .padding(16)
             }
-            .frame(maxHeight: 310)
+            .frame(maxHeight: 410)
 
             // Fixed bottom action bar
             VStack(spacing: 0) {
@@ -535,6 +541,10 @@ struct ConfigurationView: View {
                                 maxToolAttempts: parsedMaxToolAttempts
                             )
                             ChatConfigurationStore.save(chatCfg)
+
+                            // Save Provider configuration
+                            ProviderConfigurationStore.save(tempProviderConfig)
+
                             // Apply hotkey without relaunch
                             AppDelegate.shared?.applyChatHotkey()
                             // Apply login item state
@@ -565,12 +575,13 @@ struct ConfigurationView: View {
             }
             .background(theme.primaryBackground)
         }
-        .frame(width: 380, height: 460)
+        .frame(width: 400, height: 560)
         .background(theme.primaryBackground)
         .onAppear {
             tempPortString = portString
             tempExposeToNetwork = configuration.exposeToNetwork
             tempStartAtLogin = configuration.startAtLogin
+            tempProviderConfig = ProviderConfigurationStore.load()
             let chat = ChatConfigurationStore.load()
             tempChatHotkey = chat.hotkey
             tempSystemPrompt = chat.systemPrompt

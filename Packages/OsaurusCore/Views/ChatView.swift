@@ -15,36 +15,42 @@ final class ChatSession: ObservableObject {
     @Published var turns: [ChatTurn] = []
     @Published var isStreaming: Bool = false
     @Published var input: String = ""
-    @Published var selectedModel: String? = nil
-    @Published var modelOptions: [String] = []
+    @Published var selectedModel: ModelIdentifier? = nil
+    @Published var groupedModels: [(provider: LLMProvider, models: [ModelIdentifier])] = []
     @Published var scrollTick: Int = 0
     private var currentTask: Task<Void, Never>?
 
     init() {
-        // Build options list (foundation first if available)
-        var opts: [String] = []
-        if FoundationModelService.isDefaultModelAvailable() {
-            opts.append("foundation")
-        }
-        let mlx = MLXService.getAvailableModels()
-        opts.append(contentsOf: mlx)
-        modelOptions = opts
-        // Set default selectedModel to first available
-        selectedModel = opts.first
+        refreshModelOptions()
     }
 
     func refreshModelOptions() {
-        var opts: [String] = []
-        if FoundationModelService.isDefaultModelAvailable() {
-            opts.append("foundation")
+        // Get all available models grouped by provider
+        let groups = AvailableModels.grouped(includeUnconfigured: true)
+        groupedModels = groups
+
+        // Preserve current selection if still valid
+        if let current = selectedModel {
+            let allModels = groups.flatMap { $0.models }
+            if allModels.contains(where: { $0.id == current.id }) {
+                return  // Current selection is still valid
+            }
         }
-        let mlx = MLXService.getAvailableModels()
-        opts.append(contentsOf: mlx)
-        let prev = selectedModel
-        let newSelected = (prev != nil && opts.contains(prev!)) ? prev : opts.first
-        if modelOptions == opts && selectedModel == newSelected { return }
-        modelOptions = opts
-        selectedModel = newSelected
+
+        // Load from configuration or use first available
+        let config = ProviderConfigurationStore.load()
+        if let configuredModel = config.modelIdentifier {
+            selectedModel = configuredModel
+        } else if let firstGroup = groups.first, let firstModel = firstGroup.models.first {
+            selectedModel = firstModel
+        }
+    }
+
+    /// Get the model string to send to the engine (provider/model format)
+    var selectedModelString: String {
+        let result = selectedModel?.id ?? "default"
+        NSLog("[ChatSession] selectedModelString: \(result)")
+        return result
     }
 
     func sendCurrent() {
@@ -122,7 +128,7 @@ final class ChatSession: ObservableObject {
                 outer: while attempts < maxAttempts {
                     attempts += 1
                     let req = ChatCompletionRequest(
-                        model: selectedModel ?? "default",
+                        model: selectedModelString,
                         messages: buildMessages(),
                         temperature: chatCfg.temperature ?? 0.7,
                         max_tokens: chatCfg.maxTokens ?? 1024,
@@ -332,11 +338,9 @@ struct ChatView: View {
         }
     }
 
-    private func displayModelName(_ raw: String?) -> String {
-        guard let raw else { return "Model" }
-        if raw.lowercased() == "foundation" { return "Foundation" }
-        if let last = raw.split(separator: "/").last { return String(last) }
-        return raw
+    private func displayModelName(_ model: ModelIdentifier?) -> String {
+        guard let model else { return "Model" }
+        return model.shortName
     }
 
     private func conversation(_ width: CGFloat) -> some View {
@@ -561,31 +565,7 @@ struct ChatView: View {
 
     private func bottomControls(_ width: CGFloat) -> some View {
         HStack(spacing: 8) {
-            if session.modelOptions.count > 1 {
-                Picker("Model", selection: $session.selectedModel) {
-                    ForEach(session.modelOptions, id: \.self) { name in
-                        Text(name).tag(Optional(name))
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(width: 180)
-                .help("Select model")
-            } else if let selected = session.selectedModel {
-                Text(selected)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(theme.secondaryText)
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(theme.secondaryBackground.opacity(0.6))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(theme.glassEdgeLight.opacity(0.3), lineWidth: 1)
-                            )
-                    )
-            }
+            modelSelectorMenu
 
             Spacer()
 
@@ -593,30 +573,118 @@ struct ChatView: View {
         }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 12) {
-            Text("No local models found")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(theme.primaryText)
-            Text("Download an MLX model or use the Foundation model if available.")
-                .font(.system(size: 12))
-                .foregroundColor(theme.secondaryText)
-            HStack(spacing: 8) {
-                Button("Open Model Manager") {
-                    AppDelegate.shared?.showManagementWindow(initialTab: .models)
-                }
-                if FoundationModelService.isDefaultModelAvailable() {
-                    Button("Use Foundation") {
-                        session.selectedModel = "foundation"
+    @ViewBuilder
+    private var modelSelectorMenu: some View {
+        let allModels = session.groupedModels.flatMap { $0.models }
+
+        if allModels.count > 1 {
+            Menu {
+                ForEach(session.groupedModels, id: \.provider) { group in
+                    Section(header: Text(group.provider.displayName)) {
+                        ForEach(group.models) { model in
+                            Button(action: {
+                                session.selectedModel = model
+                            }) {
+                                HStack {
+                                    Text(model.shortName)
+                                    Spacer()
+                                    if model.id == session.selectedModel?.id {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                            .disabled(!isModelAvailable(model))
+                        }
                     }
                 }
+            } label: {
+                HStack(spacing: 6) {
+                    if let selected = session.selectedModel {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(selected.shortName)
+                                .font(.system(size: 12, weight: .medium))
+                                .lineLimit(1)
+                            Text(selected.provider.displayName)
+                                .font(.system(size: 9))
+                                .foregroundColor(theme.tertiaryText)
+                        }
+                    } else {
+                        Text("Select model")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9))
+                        .foregroundColor(theme.tertiaryText)
+                }
+                .padding(.vertical, 6)
+                .padding(.horizontal, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(theme.secondaryBackground.opacity(0.6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(theme.glassEdgeLight.opacity(0.3), lineWidth: 1)
+                        )
+                )
+                .foregroundColor(theme.primaryText)
+            }
+            .menuStyle(.borderlessButton)
+            .frame(minWidth: 140)
+            .help("Select model")
+        } else if let selected = session.selectedModel {
+            HStack(spacing: 4) {
+                Text(selected.shortName)
+                    .font(.system(size: 12, weight: .medium))
+                Text("·")
+                    .foregroundColor(theme.tertiaryText)
+                Text(selected.provider.displayName)
+                    .font(.system(size: 11))
+                    .foregroundColor(theme.tertiaryText)
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(theme.secondaryBackground.opacity(0.6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(theme.glassEdgeLight.opacity(0.3), lineWidth: 1)
+                    )
+            )
+        }
+    }
+
+    private func isModelAvailable(_ model: ModelIdentifier) -> Bool {
+        switch model.provider {
+        case .appleFoundation:
+            return FoundationModelService.isDefaultModelAvailable()
+        case .mlx:
+            return MLXService.getAvailableModels().contains(model.modelName)
+        case .openai, .anthropic, .gemini:
+            return KeychainHelper.hasAPIKey(for: model.provider)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Text("No models available")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(theme.primaryText)
+            Text("Download a local model or configure an API key for cloud providers.")
+                .font(.system(size: 12))
+                .foregroundColor(theme.secondaryText)
+                .multilineTextAlignment(.center)
+            Button("Open Model Manager") {
+                AppDelegate.shared?.showManagementWindow(initialTab: .models)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     private var hasAnyModel: Bool {
-        FoundationModelService.isDefaultModelAvailable() || !MLXService.getAvailableModels().isEmpty
+        // Check if any model is available (local or cloud with API key)
+        let availableModels = AvailableModels.grouped(includeUnconfigured: false)
+        return !availableModels.isEmpty
     }
 }
 

@@ -4,6 +4,10 @@
 //
 //  Created by Terence on 10/14/25.
 //
+//  DEPRECATED: This abstraction is being replaced by AnyLanguageModel.
+//  See LanguageModelFactory.swift for the new provider system.
+//  Kept for backward compatibility with MLX models during migration.
+//
 
 import Foundation
 

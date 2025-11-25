@@ -2,13 +2,25 @@
 //  ChatEngine.swift
 //  osaurus
 //
-//  Actor encapsulating model routing and generation streaming.
+//  Actor encapsulating model routing and generation streaming via AnyLanguageModel.
 //
 
+import AnyLanguageModel
 import Foundation
 
 actor ChatEngine: Sendable, ChatEngineProtocol {
-    private let services: [ModelService]
+    struct EngineError: Error, LocalizedError {
+        let message: String
+
+        init(_ message: String = "Engine error") {
+            self.message = message
+        }
+
+        var errorDescription: String? { message }
+    }
+
+    // Legacy services for backward compatibility during migration
+    private let legacyServices: [ModelService]
     private let installedModelsProvider: @Sendable () -> [String]
 
     init(
@@ -17,10 +29,46 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
             MLXService.getAvailableModels()
         }
     ) {
-        self.services = services
+        self.legacyServices = services
         self.installedModelsProvider = installedModelsProvider
     }
-    struct EngineError: Error {}
+
+    // MARK: - Provider Resolution
+
+    private func resolveProvider(requestedModel: String?) async -> (LLMProvider, String)? {
+        let trimmed = (requestedModel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Try to parse as "provider/model" format first
+        if let modelId = ModelIdentifier(from: trimmed) {
+            return (modelId.provider, modelId.modelName)
+        }
+
+        // Try to infer provider from model name
+        if let inferred = ModelIdentifier.infer(from: trimmed) {
+            return (inferred.provider, inferred.modelName)
+        }
+
+        // Fall back to configured model
+        let config = await MainActor.run { ProviderConfigurationStore.load() }
+        if let configuredModel = config.modelIdentifier {
+            return (configuredModel.provider, configuredModel.modelName)
+        }
+
+        // Last resort: check if it's a known model name
+        for provider in [LLMProvider.openai, .anthropic, .gemini] {
+            if provider.availableModels.contains(trimmed) {
+                return (provider, trimmed)
+            }
+        }
+
+        // Check installed MLX models
+        let installedModels = installedModelsProvider()
+        if installedModels.contains(trimmed) {
+            return (.mlx, trimmed)
+        }
+
+        return nil
+    }
 
     private func enrichMessagesWithSystemPrompt(_ messages: [ChatMessage]) async -> [ChatMessage] {
         // Check if a system prompt is already present
@@ -41,12 +89,174 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
         return [systemMessage] + messages
     }
 
+    // MARK: - Streaming Chat
+
     func streamChat(request: ChatCompletionRequest) async throws -> AsyncThrowingStream<String, Error> {
         let messages = await enrichMessagesWithSystemPrompt(request.messages)
+
+        // Resolve provider
+        guard let (provider, modelId) = await resolveProvider(requestedModel: request.model) else {
+            throw EngineError("Unable to resolve model provider for: \(request.model)")
+        }
+
+        NSLog("[ChatEngine] streamChat - request.model: \(request.model), resolved provider: \(provider.rawValue), modelId: \(modelId)")
+
+        // Local models (Apple Foundation and MLX) use legacy services
+        // They have specialized loading and caching that works better with our infrastructure
+        if provider == .appleFoundation || provider == .mlx {
+            // Create a request with the model name in the format the legacy service expects
+            let legacyRequest = ChatCompletionRequest(
+                model: modelId,
+                messages: request.messages,
+                temperature: request.temperature,
+                max_tokens: request.max_tokens,
+                stream: request.stream,
+                top_p: request.top_p,
+                frequency_penalty: request.frequency_penalty,
+                presence_penalty: request.presence_penalty,
+                stop: request.stop,
+                n: request.n,
+                tools: request.tools,
+                tool_choice: request.tool_choice,
+                session_id: request.session_id
+            )
+            return try await streamWithLegacyService(
+                request: legacyRequest,
+                messages: messages
+            )
+        }
+
+        // Cloud providers use AnyLanguageModel
+        let model = try await MainActor.run {
+            try LanguageModelFactory.createModel(provider: provider, modelId: modelId)
+        }
+
+        // Build the prompt from messages
+        let prompt = buildPromptContent(from: messages)
+
+        // Create streaming response
+        let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
+
+        Task {
+            do {
+                let session = LanguageModelSession(model: model)
+
+                // Stream the response
+                var previousContent = ""
+                for try await partial in session.streamResponse(to: prompt) {
+                    let currentContent = partial.content
+                    // Extract delta (new content since last update)
+                    let delta: String
+                    if currentContent.hasPrefix(previousContent) {
+                        delta = String(currentContent.dropFirst(previousContent.count))
+                    } else {
+                        delta = currentContent
+                    }
+                    if !delta.isEmpty {
+                        continuation.yield(delta)
+                    }
+                    previousContent = currentContent
+                }
+                continuation.finish()
+            } catch {
+                continuation.finish(throwing: error)
+            }
+        }
+
+        return stream
+    }
+
+    // MARK: - Non-Streaming Chat
+
+    func completeChat(request: ChatCompletionRequest) async throws -> ChatCompletionResponse {
+        let messages = await enrichMessagesWithSystemPrompt(request.messages)
+
+        // Resolve provider
+        guard let (provider, modelId) = await resolveProvider(requestedModel: request.model) else {
+            throw EngineError("Unable to resolve model provider for: \(request.model)")
+        }
+
+        // Local models (Apple Foundation and MLX) use legacy services
+        if provider == .appleFoundation || provider == .mlx {
+            let legacyRequest = ChatCompletionRequest(
+                model: modelId,
+                messages: request.messages,
+                temperature: request.temperature,
+                max_tokens: request.max_tokens,
+                stream: request.stream,
+                top_p: request.top_p,
+                frequency_penalty: request.frequency_penalty,
+                presence_penalty: request.presence_penalty,
+                stop: request.stop,
+                n: request.n,
+                tools: request.tools,
+                tool_choice: request.tool_choice,
+                session_id: request.session_id
+            )
+            return try await completeWithLegacyService(
+                request: legacyRequest,
+                messages: messages,
+                effectiveModel: modelId
+            )
+        }
+
+        // Cloud providers use AnyLanguageModel
+        let model = try await MainActor.run {
+            try LanguageModelFactory.createModel(provider: provider, modelId: modelId)
+        }
+
+        // Build the prompt from messages
+        let prompt = buildPromptContent(from: messages)
+
+        // Create session and get response
+        let session = LanguageModelSession(model: model)
+        let response = try await session.respond(to: prompt)
+
+        // Build OpenAI-compatible response
+        let created = Int(Date().timeIntervalSince1970)
+        let responseId =
+            "chatcmpl-\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12))"
+
+        let choice = ChatChoice(
+            index: 0,
+            message: ChatMessage(
+                role: "assistant",
+                content: response.content,
+                tool_calls: nil,
+                tool_call_id: nil
+            ),
+            finish_reason: "stop"
+        )
+
+        let usage = Usage(prompt_tokens: 0, completion_tokens: 0, total_tokens: 0)
+
+        return ChatCompletionResponse(
+            id: responseId,
+            created: created,
+            model: modelId,
+            choices: [choice],
+            usage: usage,
+            system_fingerprint: nil
+        )
+    }
+
+    // MARK: - Prompt Building
+
+    private func buildPromptContent(from messages: [ChatMessage]) -> String {
+        return OpenAIPromptBuilder.buildPrompt(from: messages)
+    }
+
+    // MARK: - Legacy Service Support (for MLX during migration)
+
+    private func streamWithLegacyService(
+        request: ChatCompletionRequest,
+        messages: [ChatMessage]
+    ) async throws -> AsyncThrowingStream<String, Error> {
+        NSLog("[ChatEngine] streamWithLegacyService - request.model: \(request.model)")
+
         let temperature = request.temperature ?? 1.0
         let maxTokens = request.max_tokens ?? 512
         let repPenalty: Float? = {
-            // Map OpenAI penalties (presence/frequency) to a simple repetition penalty if provided
             if let fp = request.frequency_penalty, fp > 0 { return 1.0 + fp }
             if let pp = request.presence_penalty, pp > 0 { return 1.0 + pp }
             return nil
@@ -58,28 +268,33 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
             repetitionPenalty: repPenalty
         )
 
-        // Candidate services and installed models (injected for testability)
-        let services = self.services
         let route = ModelServiceRouter.resolve(
             requestedModel: request.model,
-            services: services
+            services: legacyServices
         )
+
+        NSLog("[ChatEngine] streamWithLegacyService - route resolved: \(String(describing: route))")
 
         switch route {
         case .service(let service, _):
-            // If tools were provided and supported, use message-based tool streaming
-            if let tools = request.tools, !tools.isEmpty, let toolSvc = service as? ToolCapableService {
+            let hasTools = request.tools != nil && !request.tools!.isEmpty
+            let isToolCapable = service is ToolCapableService
+            NSLog("[ChatEngine] service found: \(service.id), hasTools: \(hasTools), isToolCapable: \(isToolCapable)")
+
+            if hasTools, let toolSvc = service as? ToolCapableService {
+                NSLog("[ChatEngine] using streamWithTools path")
                 let stopSequences = request.stop ?? []
                 return try await toolSvc.streamWithTools(
                     messages: messages,
                     parameters: params,
                     stopSequences: stopSequences,
-                    tools: tools,
+                    tools: request.tools!,
                     toolChoice: request.tool_choice,
                     requestedModel: request.model
                 )
             }
 
+            NSLog("[ChatEngine] using streamDeltas path")
             return try await service.streamDeltas(
                 messages: messages,
                 parameters: params,
@@ -87,15 +302,19 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
                 stopSequences: request.stop ?? []
             )
         case .none:
-            throw EngineError()
+            NSLog("[ChatEngine] route is .none for model: \(request.model)")
+            throw EngineError("No service available for model: \(request.model)")
         }
     }
 
-    func completeChat(request: ChatCompletionRequest) async throws -> ChatCompletionResponse {
-        let messages = await enrichMessagesWithSystemPrompt(request.messages)
+    private func completeWithLegacyService(
+        request: ChatCompletionRequest,
+        messages: [ChatMessage],
+        effectiveModel: String
+    ) async throws -> ChatCompletionResponse {
         let temperature = request.temperature ?? 1.0
         let maxTokens = request.max_tokens ?? 512
-        let repPenalty2: Float? = {
+        let repPenalty: Float? = {
             if let fp = request.frequency_penalty, fp > 0 { return 1.0 + fp }
             if let pp = request.presence_penalty, pp > 0 { return 1.0 + pp }
             return nil
@@ -104,13 +323,12 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
             temperature: temperature,
             maxTokens: maxTokens,
             topPOverride: request.top_p,
-            repetitionPenalty: repPenalty2
+            repetitionPenalty: repPenalty
         )
 
-        let services = self.services
         let route = ModelServiceRouter.resolve(
             requestedModel: request.model,
-            services: services
+            services: legacyServices
         )
 
         let created = Int(Date().timeIntervalSince1970)
@@ -118,8 +336,7 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
             "chatcmpl-\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12))"
 
         switch route {
-        case .service(let service, let effectiveModel):
-            // If tools were provided and the service supports them, use the message-based API
+        case .service(let service, let routedModel):
             if let tools = request.tools, !tools.isEmpty, let toolSvc = service as? ToolCapableService {
                 let stopSequences = request.stop ?? []
                 do {
@@ -145,13 +362,12 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
                     return ChatCompletionResponse(
                         id: responseId,
                         created: created,
-                        model: effectiveModel,
+                        model: routedModel,
                         choices: [choice],
                         usage: usage,
                         system_fingerprint: nil
                     )
                 } catch let inv as ServiceToolInvocation {
-                    // Convert tool invocation to OpenAI-style non-stream response
                     let raw = UUID().uuidString.replacingOccurrences(of: "-", with: "")
                     let callId = "call_" + String(raw.prefix(24))
                     let toolCall = ToolCall(
@@ -170,7 +386,7 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
                     return ChatCompletionResponse(
                         id: responseId,
                         created: created,
-                        model: effectiveModel,
+                        model: routedModel,
                         choices: [choice],
                         usage: usage,
                         system_fingerprint: nil
@@ -178,7 +394,6 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
                 }
             }
 
-            // Fallback to plain generation (no tools)
             let text = try await service.generateOneShot(
                 messages: messages,
                 parameters: params,
@@ -193,13 +408,13 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
             return ChatCompletionResponse(
                 id: responseId,
                 created: created,
-                model: effectiveModel,
+                model: routedModel,
                 choices: [choice],
                 usage: usage,
                 system_fingerprint: nil
             )
         case .none:
-            throw EngineError()
+            throw EngineError("No service available for model: \(request.model)")
         }
     }
 }

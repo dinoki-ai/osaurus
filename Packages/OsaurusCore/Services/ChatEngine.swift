@@ -24,7 +24,7 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
     private let installedModelsProvider: @Sendable () -> [String]
 
     init(
-        services: [ModelService] = [FoundationModelService(), MLXService()],
+        services: [ModelService] = [MLXService()],  // MLXService kept for model discovery
         installedModelsProvider: @escaping @Sendable () -> [String] = {
             MLXService.getAvailableModels()
         }
@@ -101,64 +101,61 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
 
         NSLog("[ChatEngine] streamChat - request.model: \(request.model), resolved provider: \(provider.rawValue), modelId: \(modelId)")
 
-        // Local models (Apple Foundation and MLX) use legacy services
-        // They have specialized loading and caching that works better with our infrastructure
-        if provider == .appleFoundation || provider == .mlx {
-            // Create a request with the model name in the format the legacy service expects
-            let legacyRequest = ChatCompletionRequest(
-                model: modelId,
-                messages: request.messages,
-                temperature: request.temperature,
-                max_tokens: request.max_tokens,
-                stream: request.stream,
-                top_p: request.top_p,
-                frequency_penalty: request.frequency_penalty,
-                presence_penalty: request.presence_penalty,
-                stop: request.stop,
-                n: request.n,
-                tools: request.tools,
-                tool_choice: request.tool_choice,
-                session_id: request.session_id
-            )
-            return try await streamWithLegacyService(
-                request: legacyRequest,
-                messages: messages
-            )
-        }
-
-        // Cloud providers use AnyLanguageModel
+        // All providers now use AnyLanguageModel
+        NSLog("[ChatEngine] Creating model via LanguageModelFactory for provider: \(provider.rawValue), modelId: \(modelId)")
         let model = try await MainActor.run {
             try LanguageModelFactory.createModel(provider: provider, modelId: modelId)
         }
+        NSLog("[ChatEngine] Model created successfully")
 
         // Build the prompt from messages
         let prompt = buildPromptContent(from: messages)
+        NSLog("[ChatEngine] Built prompt: \(prompt.prefix(200))...")
 
         // Create streaming response
         let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
 
         Task {
             do {
+                NSLog("[ChatEngine] Creating LanguageModelSession...")
                 let session = LanguageModelSession(model: model)
 
-                // Stream the response
-                var previousContent = ""
-                for try await partial in session.streamResponse(to: prompt) {
-                    let currentContent = partial.content
-                    // Extract delta (new content since last update)
-                    let delta: String
-                    if currentContent.hasPrefix(previousContent) {
-                        delta = String(currentContent.dropFirst(previousContent.count))
-                    } else {
-                        delta = currentContent
+                // MLX doesn't support streaming (returns empty), use non-streaming respond()
+                // Other providers (Apple Foundation, OpenAI, Anthropic, Gemini) support streaming
+                if provider == .mlx {
+                    NSLog("[ChatEngine] Using respond() (non-streaming) for MLX")
+                    let response = try await session.respond(to: prompt)
+                    let content = response.content
+                    NSLog("[ChatEngine] Response received, length: \(content.count)")
+                    
+                    if !content.isEmpty {
+                        continuation.yield(content)
                     }
-                    if !delta.isEmpty {
-                        continuation.yield(delta)
+                    continuation.finish()
+                } else {
+                    NSLog("[ChatEngine] Using streamResponse() for \(provider.rawValue)")
+                    var previousContent = ""
+                    var chunkCount = 0
+                    for try await partial in session.streamResponse(to: prompt) {
+                        chunkCount += 1
+                        let currentContent = partial.content
+                        // Extract delta (new content since last update)
+                        let delta: String
+                        if currentContent.hasPrefix(previousContent) {
+                            delta = String(currentContent.dropFirst(previousContent.count))
+                        } else {
+                            delta = currentContent
+                        }
+                        if !delta.isEmpty {
+                            continuation.yield(delta)
+                        }
+                        previousContent = currentContent
                     }
-                    previousContent = currentContent
+                    NSLog("[ChatEngine] Stream completed with \(chunkCount) chunks, final content length: \(previousContent.count)")
+                    continuation.finish()
                 }
-                continuation.finish()
             } catch {
+                NSLog("[ChatEngine] Response error: \(error)")
                 continuation.finish(throwing: error)
             }
         }
@@ -176,31 +173,7 @@ actor ChatEngine: Sendable, ChatEngineProtocol {
             throw EngineError("Unable to resolve model provider for: \(request.model)")
         }
 
-        // Local models (Apple Foundation and MLX) use legacy services
-        if provider == .appleFoundation || provider == .mlx {
-            let legacyRequest = ChatCompletionRequest(
-                model: modelId,
-                messages: request.messages,
-                temperature: request.temperature,
-                max_tokens: request.max_tokens,
-                stream: request.stream,
-                top_p: request.top_p,
-                frequency_penalty: request.frequency_penalty,
-                presence_penalty: request.presence_penalty,
-                stop: request.stop,
-                n: request.n,
-                tools: request.tools,
-                tool_choice: request.tool_choice,
-                session_id: request.session_id
-            )
-            return try await completeWithLegacyService(
-                request: legacyRequest,
-                messages: messages,
-                effectiveModel: modelId
-            )
-        }
-
-        // Cloud providers use AnyLanguageModel
+        // All providers use AnyLanguageModel
         let model = try await MainActor.run {
             try LanguageModelFactory.createModel(provider: provider, modelId: modelId)
         }

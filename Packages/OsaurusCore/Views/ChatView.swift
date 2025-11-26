@@ -657,7 +657,7 @@ struct ChatView: View {
     private func isModelAvailable(_ model: ModelIdentifier) -> Bool {
         switch model.provider {
         case .appleFoundation:
-            return FoundationModelService.isDefaultModelAvailable()
+            return AvailableModels.isAppleFoundationAvailable()
         case .mlx:
             return MLXService.getAvailableModels().contains(model.modelName)
         case .openai, .anthropic, .gemini:

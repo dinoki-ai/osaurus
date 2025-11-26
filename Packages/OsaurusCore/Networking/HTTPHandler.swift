@@ -126,7 +126,7 @@ final class HTTPHandler: ChannelInboundHandler, Sendable {
                 )
             } else if head.method == .GET, path == "/models" {
                 var models = MLXService.getAvailableModels().map { OpenAIModel(from: $0) }
-                if FoundationModelService.isDefaultModelAvailable() {
+                if AvailableModels.isAppleFoundationAvailable() {
                     models.insert(OpenAIModel(from: "foundation"), at: 0)
                 }
                 let response = ModelsResponse(data: models)
@@ -160,7 +160,7 @@ final class HTTPHandler: ChannelInboundHandler, Sendable {
                     )
                     return m
                 }
-                if FoundationModelService.isDefaultModelAvailable() {
+                if AvailableModels.isAppleFoundationAvailable() {
                     var fm = OpenAIModel(from: "foundation")
                     fm.name = "foundation"
                     fm.model = "foundation"

@@ -336,7 +336,7 @@ struct ProviderSettingsView: View {
     private func isModelReady(_ model: ModelIdentifier) -> Bool {
         switch model.provider {
         case .appleFoundation:
-            return FoundationModelService.isDefaultModelAvailable()
+            return AvailableModels.isAppleFoundationAvailable()
         case .mlx:
             return MLXService.getAvailableModels().contains(model.modelName)
         case .openai, .anthropic, .gemini:
@@ -347,7 +347,7 @@ struct ProviderSettingsView: View {
     private func modelStatusText(_ model: ModelIdentifier) -> String {
         switch model.provider {
         case .appleFoundation:
-            return FoundationModelService.isDefaultModelAvailable()
+            return AvailableModels.isAppleFoundationAvailable()
                 ? "Apple Intelligence available"
                 : "Requires macOS 26+"
         case .mlx:

@@ -36,9 +36,7 @@ public enum LanguageModelFactory {
     ) throws -> any LanguageModel {
         switch provider {
         case .appleFoundation:
-            // Apple Foundation models require macOS 26
-            // Use legacy FoundationModelService for now
-            throw FactoryError.providerNotAvailable(provider: .appleFoundation)
+            return try createAppleFoundationModel()
 
         case .mlx:
             return try createMLXModel(modelName: modelId)
@@ -53,17 +51,49 @@ public enum LanguageModelFactory {
             return try createGeminiModel(modelId: modelId)
         }
     }
+    
+    /// Create Apple Foundation model (requires macOS 26+)
+    private static func createAppleFoundationModel() throws -> any LanguageModel {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) {
+            NSLog("[LanguageModelFactory] Creating SystemLanguageModel for Apple Foundation")
+            return SystemLanguageModel.default
+        } else {
+            throw FactoryError.providerNotAvailable(provider: .appleFoundation)
+        }
+        #else
+        throw FactoryError.providerNotAvailable(provider: .appleFoundation)
+        #endif
+    }
 
     /// Create MLX model from local installation
     private static func createMLXModel(modelName: String) throws -> any LanguageModel {
+        NSLog("[LanguageModelFactory] createMLXModel called with modelName: \(modelName)")
+        
         // Find the installed model by name
         guard let model = ModelManager.findInstalledModel(named: modelName) else {
+            NSLog("[LanguageModelFactory] Model not found: \(modelName)")
+            throw FactoryError.modelNotFound(name: modelName)
+        }
+        
+        NSLog("[LanguageModelFactory] Found model - name: \(model.name), id: \(model.id)")
+
+        // Build the path to the model directory
+        // Models are stored at: {modelsDirectory}/{org}/{model}/
+        // e.g., ~/Documents/MLXModels/mlx-community/Llama-3.2-3B-Instruct-4bit/
+        let modelsDirectory = DirectoryPickerService.defaultModelsDirectory()
+        let modelDirectory = modelsDirectory.appendingPathComponent(model.id)
+        
+        NSLog("[LanguageModelFactory] Using model directory: \(modelDirectory.path)")
+        
+        // Verify directory exists
+        guard FileManager.default.fileExists(atPath: modelDirectory.path) else {
+            NSLog("[LanguageModelFactory] Model directory does not exist: \(modelDirectory.path)")
             throw FactoryError.modelNotFound(name: modelName)
         }
 
-        // Use the HuggingFace model ID (e.g., "mlx-community/Qwen3-0.6B-4bit")
-        // MLXLanguageModel will load from the HuggingFace cache or download if needed
-        return MLXLanguageModel(modelId: model.id)
+        NSLog("[LanguageModelFactory] Creating MLXLanguageModel with directory: \(modelDirectory.path)")
+        return MLXLanguageModel(modelId: model.id, directory: modelDirectory)
     }
 
     /// Create OpenAI model

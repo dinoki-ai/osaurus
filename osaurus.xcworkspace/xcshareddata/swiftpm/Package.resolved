@@ -1,13 +1,13 @@
 {
-  "originHash" : "0762580a84c1bb2e94984348988bbd79a5963630810d1ff32ea6440d8568efbf",
+  "originHash" : "c77e98798ce3a1208352459938d280137303a247f0b811aec4374bd919e78bb6",
   "pins" : [
     {
       "identity" : "anylanguagemodel",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/mattt/AnyLanguageModel.git",
+      "location" : "https://github.com/tpae/AnyLanguageModel.git",
       "state" : {
         "branch" : "main",
-        "revision" : "ab0db9829e5af0f61808a999743ded98be3f2689"
+        "revision" : "61551fbcd5e58de73644bebac165b46b309df89b"
       }
     },
     {

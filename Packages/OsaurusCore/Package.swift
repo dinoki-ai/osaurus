@@ -15,7 +15,7 @@ let package = Package(
         .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.29.1"),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "2.29.2"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.2"),
-        .package(url: "https://github.com/mattt/AnyLanguageModel.git", branch: "main", traits: ["MLX"]),
+        .package(url: "https://github.com/tpae/AnyLanguageModel.git", branch: "main", traits: ["MLX"]),
         .package(path: "../OsaurusRepository"),
     ],
     targets: [

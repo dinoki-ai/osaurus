@@ -5,6 +5,7 @@
 //  Configuration model for LLM providers with Keychain-based API key storage.
 //
 
+import AnyLanguageModel
 import Foundation
 import Security
 
@@ -134,6 +135,25 @@ public struct ModelIdentifier: Codable, Equatable, Hashable, Sendable, Identifia
 
 /// Provides a unified list of all available models across providers
 public enum AvailableModels {
+    
+    /// Check if Apple Foundation Models (Apple Intelligence) is available
+    public static func isAppleFoundationAvailable() -> Bool {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) {
+            let model = SystemLanguageModel.default
+            if case .available = model.availability {
+                NSLog("[AvailableModels] Apple Foundation is available")
+                return true
+            } else {
+                NSLog("[AvailableModels] Apple Foundation is unavailable")
+                return false
+            }
+        }
+        #endif
+        NSLog("[AvailableModels] FoundationModels not available on this OS")
+        return false
+    }
+    
     /// Get all available models from all providers
     /// - Parameter includeUnconfigured: If false, excludes cloud providers without API keys
     public static func all(includeUnconfigured: Bool = true) -> [ModelIdentifier] {
@@ -147,7 +167,7 @@ public enum AvailableModels {
 
             switch provider {
             case .appleFoundation:
-                if FoundationModelService.isDefaultModelAvailable() {
+                if isAppleFoundationAvailable() {
                     models.append(ModelIdentifier(provider: provider, modelName: "default"))
                 }
             case .mlx:
@@ -178,7 +198,7 @@ public enum AvailableModels {
 
             switch provider {
             case .appleFoundation:
-                if FoundationModelService.isDefaultModelAvailable() {
+                if isAppleFoundationAvailable() {
                     providerModels.append(ModelIdentifier(provider: provider, modelName: "default"))
                 }
             case .mlx:
@@ -229,7 +249,7 @@ public struct ProviderConfiguration: Codable, Equatable, Sendable {
 
     public static var `default`: ProviderConfiguration {
         // Default to first available model
-        if FoundationModelService.isDefaultModelAvailable() {
+        if AvailableModels.isAppleFoundationAvailable() {
             return ProviderConfiguration(selectedModel: "apple_foundation/default")
         }
         let mlxModels = MLXService.getAvailableModels()

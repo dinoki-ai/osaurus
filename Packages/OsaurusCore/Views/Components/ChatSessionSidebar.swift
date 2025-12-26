@@ -60,7 +60,13 @@ struct ChatSessionSidebar: View {
         }
         .frame(width: 240, alignment: .top)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(theme.secondaryBackground.opacity(colorScheme == .dark ? 0.85 : 0.9))
+        .background {
+            if theme.glassEnabled {
+                ThemedGlassSurface(cornerRadius: 0)
+            } else {
+                theme.secondaryBackground
+            }
+        }
     }
 
     private func dismissEditing() {

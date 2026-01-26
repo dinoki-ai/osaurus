@@ -8,19 +8,35 @@
 import Foundation
 
 enum ToolDetection {
+    // MARK: - Configuration
+
+    /// Max characters to scan backwards for tool calls.
+    /// Matched to StreamAccumulator.maxBufferSize to ensure we can detect large tool calls.
+    private static let maxScanWindow = 45_000
+
+    /// Max characters to search when finding the enclosing JSON object.
+    private static let maxJSONSearchLimit = 10_000
+
     /// Best-effort detector for inline tool-call JSON in generated text. Returns (toolName, argsJSON).
     static func detectInlineToolCall(
         in text: String,
         tools: [Tool]
     ) -> (String, String)? {
         guard !tools.isEmpty, !text.isEmpty else { return nil }
-        let window = String(text.suffix(5000))
+
+        let window = String(text.suffix(maxScanWindow))
         let toolNames = Set(tools.map { $0.function.name })
 
         for name in toolNames {
-            if let range = window.range(of: #""name"\s*:\s*"\#(name)""#, options: [.regularExpression])
-                ?? window.range(of: #""tool_name"\s*:\s*"\#(name)""#, options: [.regularExpression])
-            {
+            let pattern = #""(?:tool_)?name"\s*:\s*"\#(name)""#
+
+            // Search backwards from the end of the string.
+            // The valid tool call is most likely the last thing generated.
+            // This avoids scanning through earlier "thought process" mentions unnecessarily.
+            var searchRange = window.startIndex ..< window.endIndex
+
+            while let range = window.range(of: pattern, options: [.regularExpression, .backwards], range: searchRange) {
+                // Check if this name occurrence is inside a valid JSON object
                 if let jsonRange = findEnclosingJSONObject(around: range.lowerBound, in: window) {
                     let candidate = String(window[jsonRange])
                     if let (detectedName, argsJSON) = extractToolCall(fromJSON: candidate) {
@@ -28,6 +44,13 @@ enum ToolDetection {
                             return (detectedName, argsJSON)
                         }
                     }
+                }
+
+                // Continue searching backwards for other occurrences
+                if range.lowerBound > window.startIndex {
+                    searchRange = window.startIndex ..< range.lowerBound
+                } else {
+                    break
                 }
             }
         }
@@ -41,11 +64,15 @@ enum ToolDetection {
     ) -> Range<String.Index>? {
         var startPositions: [String.Index] = []
         var i = index
+
+        // Scan backwards for opening braces
         while i > text.startIndex {
             i = text.index(before: i)
             if text[i] == "{" { startPositions.append(i) }
-            if startPositions.count > 4096 { break }
+            if startPositions.count > maxJSONSearchLimit { break }
         }
+
+        // Try to match closing braces for each candidate start
         for start in startPositions {
             if let end = matchJSONObjectEnd(from: start, in: text) {
                 if start <= index && index < end { return start ..< end }

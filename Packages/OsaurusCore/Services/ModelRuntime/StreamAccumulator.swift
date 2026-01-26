@@ -25,9 +25,12 @@ struct StreamAccumulator {
 
             let maxStopLen = stopSequences.map { $0.count }.max() ?? 0
             let shouldCheckStop = !stopSequences.isEmpty
-            // Tool detection needs ~5000 chars. We prune when buffer is roughly double that to amortize shifting costs.
-            let maxBufferSize = 10_000
-            let pruneToSize = 5_000
+
+            // Buffer Configuration
+            // Increased buffer size to support large tool calls (e.g. file writes).
+            // Tool detection needs ~45k chars context. We prune when buffer exceeds 60k.
+            let maxBufferSize = 60_000
+            let pruneToSize = 40_000
 
             for await event in events {
                 // Check for task cancellation to allow early termination
